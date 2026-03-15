@@ -6,6 +6,7 @@ const prisma = require('../src/db/client');
 const { extractMetadata } = require('../services/metadataExtractor');
 const { formatDocument } = require('../services/docxFormatter');
 const { validateDocument: runValidation } = require('../services/formatValidator');
+const { generateCoverSheet } = require('../services/coverSheetGenerator');
 
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
 const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -262,7 +263,23 @@ async function formatDoc(req, res) {
       data: { status: 'formatted', formattedStoragePath: formattedFilename },
     });
 
-    return res.json({ message: 'Document formatted successfully.', documentId: doc.id, status: 'formatted' });
+    // Auto-apply cover sheet after formatting
+    let finalStatus = 'formatted';
+    try {
+      const finalFilename = `final-${uuidv4()}.docx`;
+      const finalPath = path.join(UPLOAD_DIR, finalFilename);
+      const updatedDoc = await prisma.document.findUnique({ where: { id: doc.id }, include: { metadata: true } });
+      await generateCoverSheet(outputPath, finalPath, updatedDoc.metadata);
+      await prisma.document.update({
+        where: { id: doc.id },
+        data: { status: 'cover_sheet_applied', finalStoragePath: finalFilename },
+      });
+      finalStatus = 'cover_sheet_applied';
+    } catch (coverErr) {
+      // Non-fatal: document remains in formatted status
+    }
+
+    return res.json({ message: 'Document formatted successfully.', documentId: doc.id, status: finalStatus });
   } catch (err) {
     await prisma.document.update({
       where: { id: doc.id },
@@ -359,4 +376,68 @@ async function getValidationReport(req, res) {
   });
 }
 
-module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument, getDocumentMetadata, formatDoc, downloadFormattedDocument, validateDoc, getValidationReport };
+async function applyCoverSheet(req, res) {
+  const doc = await prisma.document.findFirst({
+    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+    include: { metadata: true },
+  });
+
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+
+  if (doc.status !== 'formatted') {
+    return res.status(422).json({ error: 'Document must be in formatted status. Run POST /format first.' });
+  }
+
+  if (!doc.formattedStoragePath) {
+    return res.status(422).json({ error: 'Formatted document not available. Run POST /format first.' });
+  }
+
+  const inputPath = path.join(UPLOAD_DIR, doc.formattedStoragePath);
+  if (!fs.existsSync(inputPath)) {
+    return res.status(404).json({ error: 'Formatted file not found on storage.' });
+  }
+
+  try {
+    const finalFilename = `final-${uuidv4()}.docx`;
+    const outputPath = path.join(UPLOAD_DIR, finalFilename);
+
+    await generateCoverSheet(inputPath, outputPath, doc.metadata);
+
+    await prisma.document.update({
+      where: { id: doc.id },
+      data: { status: 'cover_sheet_applied', finalStoragePath: finalFilename },
+    });
+
+    return res.json({ message: 'Cover sheet applied successfully.', documentId: doc.id, status: 'cover_sheet_applied' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Cover sheet generation failed.', details: err.message });
+  }
+}
+
+async function downloadFinalDocument(req, res) {
+  const doc = await prisma.document.findFirst({
+    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+  });
+
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+
+  if (!doc.finalStoragePath) {
+    return res.status(404).json({ error: 'Final document not available. Run POST /cover-sheet first.' });
+  }
+
+  const filePath = path.join(UPLOAD_DIR, doc.finalStoragePath);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Final file not found on storage.' });
+  }
+
+  const finalFilename = `final-${doc.originalFilename.replace(/\.docx$/i, '')}.docx`;
+  res.setHeader('Content-Disposition', `attachment; filename="${finalFilename}"`);
+  res.setHeader('Content-Type', DOCX_MIME);
+  return res.sendFile(filePath);
+}
+
+module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument, getDocumentMetadata, formatDoc, downloadFormattedDocument, validateDoc, getValidationReport, applyCoverSheet, downloadFinalDocument };

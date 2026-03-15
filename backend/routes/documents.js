@@ -12,6 +12,8 @@ const {
   downloadFormattedDocument,
   validateDoc,
   getValidationReport,
+  applyCoverSheet,
+  downloadFinalDocument,
 } = require('../controllers/documentController');
 
 // Wrap multer errors into proper HTTP responses
@@ -37,5 +39,7 @@ router.post('/:id/format', authenticate, formatDoc);
 router.get('/:id/formatted/download', authenticate, downloadFormattedDocument);
 router.post('/:id/validate', authenticate, validateDoc);
 router.get('/:id/validation-report', authenticate, getValidationReport);
+router.post('/:id/cover-sheet', authenticate, applyCoverSheet);
+router.get('/:id/final/download', authenticate, downloadFinalDocument);
 
 module.exports = router;
