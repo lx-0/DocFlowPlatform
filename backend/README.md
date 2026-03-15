@@ -56,13 +56,15 @@ npm run dev
 
 The server starts on `http://localhost:3000` by default (configurable via `PORT` in `.env`).
 
-## Health Check
+## API Endpoints
 
-```
-GET /health
-```
+| Method | Path | Description | Auth required |
+|:-------|:-----|:------------|:--------------|
+| `GET` | `/health` | Health check | No |
+| `POST` | `/api/auth/register` | Register a new user | No |
+| `POST` | `/api/auth/login` | Log in, receive JWT | No |
 
-Returns `200 OK` with `{ "status": "ok" }` when the server is running.
+See [docs/api-reference.md](../docs/api-reference.md) for full request/response details.
 
 ## Project Structure
 
@@ -78,11 +80,13 @@ backend/
 │   ├── schema.prisma        # Database schema definition
 │   └── migrations/          # Migration history
 ├── routes/                  # Route definitions
-│   └── health.js
+│   ├── health.js
+│   └── auth.js
 ├── controllers/             # Request handlers
-│   └── healthController.js
-├── models/                  # Data models
-├── middleware/              # Custom middleware
+│   ├── healthController.js
+│   └── authController.js
+├── middleware/
+│   └── auth.js              # JWT verification middleware
 ├── .env.example             # Example environment variables
 └── package.json
 ```

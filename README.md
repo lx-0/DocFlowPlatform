@@ -35,13 +35,23 @@ DocFlow Platform ensures consistent formatting conventions (including proper cov
 cd backend
 npm install
 cp .env.example .env
-# Edit .env — set DATABASE_URL to your local PostgreSQL connection string
+# Edit .env — set DATABASE_URL and JWT_SECRET
 npm run db:generate
 npm run db:migrate:dev
 npm run dev
 ```
 
-See [`backend/README.md`](backend/README.md) for full details.
+Server runs at `http://localhost:3000`. See [`backend/README.md`](backend/README.md) for full details.
+
+### Frontend setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Dev server runs at `http://localhost:5173` and proxies `/api/*` to the backend. See [`frontend/README.md`](frontend/README.md) for full details.
 
 ## Project Structure
 
@@ -63,9 +73,17 @@ docflow-platform/
 | M4 | Enterprise Integration & Security | planned |
 | M5 | Analytics & Reporting | planned |
 
+## Documentation
+
+| Document | Description |
+|:---------|:------------|
+| [docs/architecture.md](docs/architecture.md) | System design, component relationships, and data flow |
+| [docs/api-reference.md](docs/api-reference.md) | Full REST API reference |
+| [docs/contributing.md](docs/contributing.md) | Contribution guide and PR workflow |
+
 ## Contributing
 
-See [docs/contributing.md](docs/contributing.md) (coming soon) for contribution guidelines and the PR workflow.
+See [docs/contributing.md](docs/contributing.md) for contribution guidelines and the PR workflow.
 
 ---
 
