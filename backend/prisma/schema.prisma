@@ -2,21 +2,36 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
+  id           String     @id @default(uuid())
+  email        String     @unique
   passwordHash String
-  role         String   @default("user")
-  createdAt    DateTime @default(now())
+  role         String     @default("user")
+  createdAt    DateTime   @default(now())
+  documents    Document[]
 
   @@map("users")
+}
+
+model Document {
+  id                 String   @id @default(uuid())
+  originalFilename   String
+  mimeType           String
+  sizeBytes          Int
+  storagePath        String
+  uploadedByUserId   String
+  status             String   @default("uploaded")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  uploadedBy         User     @relation(fields: [uploadedByUserId], references: [id])
+
+  @@map("docflow_documents")
 }
