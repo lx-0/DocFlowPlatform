@@ -47,6 +47,7 @@ model Document {
   uploadedBy           User              @relation(fields: [uploadedByUserId], references: [id])
   metadata             DocumentMetadata?
   validationReport     ValidationReport?
+  approvalWorkflow     ApprovalWorkflow?
 
   @@map("docflow_documents")
 }
@@ -90,4 +91,45 @@ model ValidationReport {
   document    Document @relation(fields: [documentId], references: [id])
 
   @@map("document_validation_reports")
+}
+
+enum WorkflowStatus {
+  pending
+  approved
+  rejected
+  changes_requested
+}
+
+enum StepAction {
+  approved
+  rejected
+  changes_requested
+}
+
+model ApprovalWorkflow {
+  id          String         @id @default(uuid())
+  documentId  String         @unique
+  queueName   String
+  currentStep Int            @default(1)
+  totalSteps  Int
+  status      WorkflowStatus @default(pending)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  document    Document       @relation(fields: [documentId], references: [id])
+  steps       ApprovalStep[]
+
+  @@map("approval_workflows")
+}
+
+model ApprovalStep {
+  id               String           @id @default(uuid())
+  workflowId       String
+  stepNumber       Int
+  assignedToUserId String?
+  action           StepAction?
+  comment          String?
+  actedAt          DateTime?
+  workflow         ApprovalWorkflow @relation(fields: [workflowId], references: [id])
+
+  @@map("approval_steps")
 }

@@ -4,6 +4,7 @@ const healthRoutes = require('../routes/health');
 const authRoutes = require('../routes/auth');
 const documentRoutes = require('../routes/documents');
 const routingRulesRoutes = require('../routes/routingRules');
+const approvalsRoutes = require('../routes/approvals');
 
 const app = express();
 
@@ -14,5 +15,6 @@ app.use('/', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/routing-rules', routingRulesRoutes);
+app.use('/api/approvals', approvalsRoutes);
 
 module.exports = app;
