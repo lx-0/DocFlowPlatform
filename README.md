@@ -1,5 +1,7 @@
 # DocFlow Platform
 
+[![CI](https://github.com/lx-0/DocFlowPlatform/actions/workflows/ci.yml/badge.svg)](https://github.com/lx-0/DocFlowPlatform/actions/workflows/ci.yml)
+
 An internal documentation workflow platform that automates formatting, routing, and approval processes for recurring enterprise paperwork.
 
 ## Overview
