@@ -149,6 +149,8 @@ async function getDocument(req, res) {
       mimeType: true,
       sizeBytes: true,
       status: true,
+      routingQueueId: true,
+      routingStatus: true,
       createdAt: true,
       updatedAt: true,
     },

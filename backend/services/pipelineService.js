@@ -7,6 +7,7 @@ const { extractMetadata } = require('./metadataExtractor');
 const { validateDocument: runValidation } = require('./formatValidator');
 const { formatDocument } = require('./docxFormatter');
 const { generateCoverSheet } = require('./coverSheetGenerator');
+const { routeDocument } = require('./routingEngine');
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../uploads');
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -80,7 +81,16 @@ async function runPipeline(documentId) {
     return;
   }
 
-  // Stages 3 & 4 apply to DOCX only
+  // Stage 3: Route document to approval queue
+  try {
+    const latestMetadata = await prisma.documentMetadata.findUnique({ where: { documentId } });
+    await routeDocument(documentId, latestMetadata);
+  } catch (err) {
+    console.error(`[Pipeline] Routing failed for document ${documentId}: ${err.message}`);
+    // Non-fatal: pipeline continues even if routing fails
+  }
+
+  // Stages 4 & 5 apply to DOCX only
   if (doc.mimeType !== DOCX_MIME) return;
 
   // Stage 3: Format document
