@@ -22,16 +22,34 @@ model User {
 }
 
 model Document {
-  id                 String   @id @default(uuid())
+  id                 String            @id @default(uuid())
   originalFilename   String
   mimeType           String
   sizeBytes          Int
   storagePath        String
   uploadedByUserId   String
-  status             String   @default("uploaded")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  uploadedBy         User     @relation(fields: [uploadedByUserId], references: [id])
+  status             String            @default("uploaded")
+  errorMessage       String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  uploadedBy         User              @relation(fields: [uploadedByUserId], references: [id])
+  metadata           DocumentMetadata?
 
   @@map("docflow_documents")
+}
+
+model DocumentMetadata {
+  id             String    @id @default(uuid())
+  documentId     String    @unique
+  title          String?
+  author         String?
+  docCreatedAt   DateTime?
+  lastModifiedAt DateTime?
+  pageCount      Int?
+  documentType   String
+  wordCount      Int?
+  extractedAt    DateTime  @default(now())
+  document       Document  @relation(fields: [documentId], references: [id])
+
+  @@map("document_metadata")
 }

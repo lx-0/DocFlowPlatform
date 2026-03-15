@@ -3,6 +3,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const prisma = require('../src/db/client');
+const { extractMetadata } = require('../services/metadataExtractor');
 
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
 const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -62,14 +63,86 @@ async function uploadDocument(req, res) {
     },
   });
 
+  // Extract metadata synchronously; on failure, mark document as metadata_failed
+  const filePath = path.join(UPLOAD_DIR, storagePath);
+  try {
+    const meta = await extractMetadata(filePath, req.file.mimetype);
+    await prisma.documentMetadata.create({
+      data: {
+        id: uuidv4(),
+        documentId: doc.id,
+        title: meta.title,
+        author: meta.author,
+        docCreatedAt: meta.createdAt,
+        lastModifiedAt: meta.lastModifiedAt,
+        pageCount: meta.pageCount,
+        documentType: meta.documentType,
+        wordCount: meta.wordCount,
+      },
+    });
+  } catch (err) {
+    await prisma.document.update({
+      where: { id: doc.id },
+      data: { status: 'metadata_failed', errorMessage: err.message },
+    });
+  }
+
+  const updated = await prisma.document.findUnique({
+    where: { id: doc.id },
+    select: { id: true, originalFilename: true, mimeType: true, sizeBytes: true, uploadedByUserId: true, status: true, createdAt: true },
+  });
+
   return res.status(201).json({
-    id: doc.id,
-    originalFilename: doc.originalFilename,
-    mimeType: doc.mimeType,
-    size: doc.sizeBytes,
-    uploadedBy: doc.uploadedByUserId,
-    uploadedAt: doc.createdAt,
-    status: doc.status,
+    id: updated.id,
+    originalFilename: updated.originalFilename,
+    mimeType: updated.mimeType,
+    size: updated.sizeBytes,
+    uploadedBy: updated.uploadedByUserId,
+    uploadedAt: updated.createdAt,
+    status: updated.status,
+  });
+}
+
+async function getDocumentMetadata(req, res) {
+  const doc = await prisma.document.findFirst({
+    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+    select: {
+      id: true,
+      status: true,
+      errorMessage: true,
+      metadata: {
+        select: {
+          title: true,
+          author: true,
+          docCreatedAt: true,
+          lastModifiedAt: true,
+          pageCount: true,
+          documentType: true,
+          wordCount: true,
+          extractedAt: true,
+        },
+      },
+    },
+  });
+
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+
+  if (!doc.metadata) {
+    return res.status(404).json({ error: 'Metadata not available.', status: doc.status, errorMessage: doc.errorMessage });
+  }
+
+  return res.json({
+    documentId: doc.id,
+    title: doc.metadata.title,
+    author: doc.metadata.author,
+    createdAt: doc.metadata.docCreatedAt,
+    lastModifiedAt: doc.metadata.lastModifiedAt,
+    pageCount: doc.metadata.pageCount,
+    documentType: doc.metadata.documentType,
+    wordCount: doc.metadata.wordCount,
+    extractedAt: doc.metadata.extractedAt,
   });
 }
 
@@ -130,4 +203,4 @@ async function downloadDocument(req, res) {
   return res.sendFile(filePath);
 }
 
-module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument };
+module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument, getDocumentMetadata };
