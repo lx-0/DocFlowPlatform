@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -16,6 +16,7 @@ export default function Dashboard() {
           <a href="#" style={{ ...styles.navItem, ...styles.navItemActive }}>Dashboard</a>
           <a href="#" style={styles.navItem}>Documents</a>
           <a href="#" style={styles.navItem}>Workflows</a>
+          <Link to="/approvals" style={styles.navItem}>Approvals</Link>
           <a href="#" style={styles.navItem}>Settings</a>
         </nav>
         <button onClick={handleLogout} style={styles.logoutBtn}>Sign out</button>
@@ -84,6 +85,8 @@ const styles = {
     color: '#94a3b8',
     fontSize: '0.9rem',
     fontWeight: 500,
+    textDecoration: 'none',
+    display: 'block',
   },
   navItemActive: {
     background: '#334155',

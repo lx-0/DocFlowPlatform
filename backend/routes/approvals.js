@@ -23,7 +23,15 @@ router.get('/', authenticate, async (req, res) => {
           },
         },
       },
-      include: { steps: true },
+      include: {
+        steps: true,
+        document: {
+          include: {
+            metadata: true,
+            uploadedBy: { select: { id: true, name: true, email: true } },
+          },
+        },
+      },
       orderBy: { createdAt: 'asc' },
     });
     res.json(workflows);
@@ -38,7 +46,15 @@ router.get('/:workflowId', authenticate, async (req, res) => {
   try {
     const workflow = await prisma.approvalWorkflow.findUnique({
       where: { id: req.params.workflowId },
-      include: { steps: { orderBy: { stepNumber: 'asc' } } },
+      include: {
+        steps: { orderBy: { stepNumber: 'asc' } },
+        document: {
+          include: {
+            metadata: true,
+            uploadedBy: { select: { id: true, name: true, email: true } },
+          },
+        },
+      },
     });
     if (!workflow) {
       return res.status(404).json({ error: 'Workflow not found' });
