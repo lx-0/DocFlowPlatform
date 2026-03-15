@@ -10,6 +10,8 @@ const {
   getDocumentMetadata,
   formatDoc,
   downloadFormattedDocument,
+  validateDoc,
+  getValidationReport,
 } = require('../controllers/documentController');
 
 // Wrap multer errors into proper HTTP responses
@@ -33,5 +35,7 @@ router.get('/:id/metadata', authenticate, getDocumentMetadata);
 router.get('/:id/download', authenticate, downloadDocument);
 router.post('/:id/format', authenticate, formatDoc);
 router.get('/:id/formatted/download', authenticate, downloadFormattedDocument);
+router.post('/:id/validate', authenticate, validateDoc);
+router.get('/:id/validation-report', authenticate, getValidationReport);
 
 module.exports = router;

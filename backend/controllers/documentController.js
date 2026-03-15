@@ -5,6 +5,7 @@ const multer = require('multer');
 const prisma = require('../src/db/client');
 const { extractMetadata } = require('../services/metadataExtractor');
 const { formatDocument } = require('../services/docxFormatter');
+const { validateDocument: runValidation } = require('../services/formatValidator');
 
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
 const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -64,11 +65,12 @@ async function uploadDocument(req, res) {
     },
   });
 
-  // Extract metadata synchronously; on failure, mark document as metadata_failed
+  // Extract metadata then validate; on failure, mark document accordingly
   const filePath = path.join(UPLOAD_DIR, storagePath);
+  let savedMeta = null;
   try {
     const meta = await extractMetadata(filePath, req.file.mimetype);
-    await prisma.documentMetadata.create({
+    savedMeta = await prisma.documentMetadata.create({
       data: {
         id: uuidv4(),
         documentId: doc.id,
@@ -86,6 +88,25 @@ async function uploadDocument(req, res) {
       where: { id: doc.id },
       data: { status: 'metadata_failed', errorMessage: err.message },
     });
+  }
+
+  // Run format validation automatically after upload
+  try {
+    const result = runValidation(filePath, req.file.mimetype, savedMeta);
+    const newStatus = result.valid ? 'validated' : 'validation_failed';
+    await prisma.$transaction([
+      prisma.validationReport.upsert({
+        where: { documentId: doc.id },
+        create: { id: uuidv4(), documentId: doc.id, valid: result.valid, violations: result.violations },
+        update: { valid: result.valid, violations: result.violations, validatedAt: new Date() },
+      }),
+      prisma.document.update({
+        where: { id: doc.id },
+        data: { status: newStatus },
+      }),
+    ]);
+  } catch (err) {
+    // Non-fatal: validation errors don't block the upload response
   }
 
   const updated = await prisma.document.findUnique({
@@ -275,4 +296,67 @@ async function downloadFormattedDocument(req, res) {
   return res.sendFile(filePath);
 }
 
-module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument, getDocumentMetadata, formatDoc, downloadFormattedDocument };
+async function validateDoc(req, res) {
+  const doc = await prisma.document.findFirst({
+    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+    include: { metadata: true },
+  });
+
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+
+  const filePath = path.join(UPLOAD_DIR, doc.storagePath);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File not found on storage.' });
+  }
+
+  let result;
+  try {
+    result = runValidation(filePath, doc.mimeType, doc.metadata);
+  } catch (err) {
+    return res.status(422).json({ error: err.message });
+  }
+
+  const newStatus = result.valid ? 'validated' : 'validation_failed';
+  await prisma.$transaction([
+    prisma.validationReport.upsert({
+      where: { documentId: doc.id },
+      create: { id: uuidv4(), documentId: doc.id, valid: result.valid, violations: result.violations },
+      update: { valid: result.valid, violations: result.violations, validatedAt: new Date() },
+    }),
+    prisma.document.update({
+      where: { id: doc.id },
+      data: { status: newStatus },
+    }),
+  ]);
+
+  return res.json({ valid: result.valid, violations: result.violations });
+}
+
+async function getValidationReport(req, res) {
+  const doc = await prisma.document.findFirst({
+    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+  });
+
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+
+  const report = await prisma.validationReport.findUnique({
+    where: { documentId: doc.id },
+  });
+
+  if (!report) {
+    return res.status(404).json({ error: 'No validation report available. Run POST /validate first.' });
+  }
+
+  return res.json({
+    documentId: doc.id,
+    valid: report.valid,
+    violations: report.violations,
+    validatedAt: report.validatedAt,
+  });
+}
+
+module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument, getDocumentMetadata, formatDoc, downloadFormattedDocument, validateDoc, getValidationReport };

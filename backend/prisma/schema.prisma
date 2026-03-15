@@ -35,6 +35,7 @@ model Document {
   updatedAt          DateTime          @updatedAt
   uploadedBy         User              @relation(fields: [uploadedByUserId], references: [id])
   metadata           DocumentMetadata?
+  validationReport   ValidationReport?
 
   @@map("docflow_documents")
 }
@@ -53,4 +54,15 @@ model DocumentMetadata {
   document       Document  @relation(fields: [documentId], references: [id])
 
   @@map("document_metadata")
+}
+
+model ValidationReport {
+  id          String   @id @default(uuid())
+  documentId  String   @unique
+  valid       Boolean
+  violations  Json
+  validatedAt DateTime @default(now())
+  document    Document @relation(fields: [documentId], references: [id])
+
+  @@map("document_validation_reports")
 }
