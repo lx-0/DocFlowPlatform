@@ -14,6 +14,8 @@ const {
   getValidationReport,
   applyCoverSheet,
   downloadFinalDocument,
+  getDocumentStatus,
+  reprocessDocument,
 } = require('../controllers/documentController');
 
 // Wrap multer errors into proper HTTP responses
@@ -33,6 +35,7 @@ function handleUpload(req, res, next) {
 router.post('/upload', authenticate, handleUpload, uploadDocument);
 router.get('/', authenticate, listDocuments);
 router.get('/:id', authenticate, getDocument);
+router.get('/:id/status', authenticate, getDocumentStatus);
 router.get('/:id/metadata', authenticate, getDocumentMetadata);
 router.get('/:id/download', authenticate, downloadDocument);
 router.post('/:id/format', authenticate, formatDoc);
@@ -41,5 +44,6 @@ router.post('/:id/validate', authenticate, validateDoc);
 router.get('/:id/validation-report', authenticate, getValidationReport);
 router.post('/:id/cover-sheet', authenticate, applyCoverSheet);
 router.get('/:id/final/download', authenticate, downloadFinalDocument);
+router.post('/:id/reprocess', authenticate, reprocessDocument);
 
 module.exports = router;

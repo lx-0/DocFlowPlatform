@@ -3,10 +3,10 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const prisma = require('../src/db/client');
-const { extractMetadata } = require('../services/metadataExtractor');
 const { formatDocument } = require('../services/docxFormatter');
 const { validateDocument: runValidation } = require('../services/formatValidator');
 const { generateCoverSheet } = require('../services/coverSheetGenerator');
+const { runPipeline } = require('../services/pipelineService');
 
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
 const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -66,63 +66,17 @@ async function uploadDocument(req, res) {
     },
   });
 
-  // Extract metadata then validate; on failure, mark document accordingly
-  const filePath = path.join(UPLOAD_DIR, storagePath);
-  let savedMeta = null;
-  try {
-    const meta = await extractMetadata(filePath, req.file.mimetype);
-    savedMeta = await prisma.documentMetadata.create({
-      data: {
-        id: uuidv4(),
-        documentId: doc.id,
-        title: meta.title,
-        author: meta.author,
-        docCreatedAt: meta.createdAt,
-        lastModifiedAt: meta.lastModifiedAt,
-        pageCount: meta.pageCount,
-        documentType: meta.documentType,
-        wordCount: meta.wordCount,
-      },
-    });
-  } catch (err) {
-    await prisma.document.update({
-      where: { id: doc.id },
-      data: { status: 'metadata_failed', errorMessage: err.message },
-    });
-  }
-
-  // Run format validation automatically after upload
-  try {
-    const result = runValidation(filePath, req.file.mimetype, savedMeta);
-    const newStatus = result.valid ? 'validated' : 'validation_failed';
-    await prisma.$transaction([
-      prisma.validationReport.upsert({
-        where: { documentId: doc.id },
-        create: { id: uuidv4(), documentId: doc.id, valid: result.valid, violations: result.violations },
-        update: { valid: result.valid, violations: result.violations, validatedAt: new Date() },
-      }),
-      prisma.document.update({
-        where: { id: doc.id },
-        data: { status: newStatus },
-      }),
-    ]);
-  } catch (err) {
-    // Non-fatal: validation errors don't block the upload response
-  }
-
-  const updated = await prisma.document.findUnique({
-    where: { id: doc.id },
-    select: { id: true, originalFilename: true, mimeType: true, sizeBytes: true, uploadedByUserId: true, status: true, createdAt: true },
-  });
+  // Kick off pipeline asynchronously — client polls GET /status
+  runPipeline(doc.id).catch(() => {});
 
   return res.status(201).json({
-    id: updated.id,
-    originalFilename: updated.originalFilename,
-    mimeType: updated.mimeType,
-    size: updated.sizeBytes,
-    uploadedBy: updated.uploadedByUserId,
-    uploadedAt: updated.createdAt,
-    status: updated.status,
+    id: doc.id,
+    originalFilename: doc.originalFilename,
+    mimeType: doc.mimeType,
+    size: doc.sizeBytes,
+    uploadedBy: doc.uploadedByUserId,
+    uploadedAt: doc.createdAt,
+    status: doc.status,
   });
 }
 
@@ -440,4 +394,57 @@ async function downloadFinalDocument(req, res) {
   return res.sendFile(filePath);
 }
 
-module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument, getDocumentMetadata, formatDoc, downloadFormattedDocument, validateDoc, getValidationReport, applyCoverSheet, downloadFinalDocument };
+const STATUS_INFO = {
+  uploaded:             { stage: 'upload',             progress: 5   },
+  extracting_metadata:  { stage: 'metadata_extraction', progress: 20  },
+  metadata_failed:      { stage: 'metadata_extraction', progress: 20  },
+  validating:           { stage: 'format_validation',   progress: 40  },
+  validation_failed:    { stage: 'format_validation',   progress: 40  },
+  validated:            { stage: 'format_validation',   progress: 50  },
+  formatting:           { stage: 'formatting',          progress: 65  },
+  formatting_failed:    { stage: 'formatting',          progress: 65  },
+  formatted:            { stage: 'formatting',          progress: 75  },
+  applying_cover_sheet: { stage: 'cover_sheet',         progress: 90  },
+  cover_sheet_failed:   { stage: 'cover_sheet',         progress: 90  },
+  cover_sheet_applied:  { stage: 'cover_sheet',         progress: 100 },
+};
+
+async function getDocumentStatus(req, res) {
+  const doc = await prisma.document.findFirst({
+    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+    select: { id: true, status: true, errorMessage: true },
+  });
+
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+
+  const info = STATUS_INFO[doc.status] || { stage: 'unknown', progress: 0 };
+  return res.json({
+    status: doc.status,
+    stage: info.stage,
+    progress: info.progress,
+    errors: doc.errorMessage ? [doc.errorMessage] : [],
+  });
+}
+
+async function reprocessDocument(req, res) {
+  const doc = await prisma.document.findFirst({
+    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+  });
+
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+
+  await prisma.document.update({
+    where: { id: doc.id },
+    data: { status: 'uploaded', errorMessage: null, formattedStoragePath: null, finalStoragePath: null },
+  });
+
+  runPipeline(doc.id).catch(() => {});
+
+  return res.json({ message: 'Reprocessing started.', documentId: doc.id, status: 'uploaded' });
+}
+
+module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument, getDocumentMetadata, formatDoc, downloadFormattedDocument, validateDoc, getValidationReport, applyCoverSheet, downloadFinalDocument, getDocumentStatus, reprocessDocument };
