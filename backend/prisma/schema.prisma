@@ -21,24 +21,48 @@ model User {
   @@map("users")
 }
 
+enum RoutingStatus {
+  unrouted
+  queued
+  in_approval
+  approved
+  rejected
+}
+
 model Document {
-  id                 String            @id @default(uuid())
-  originalFilename   String
-  mimeType           String
-  sizeBytes          Int
+  id                   String            @id @default(uuid())
+  originalFilename     String
+  mimeType             String
+  sizeBytes            Int
   storagePath          String
   formattedStoragePath String?
   finalStoragePath     String?
   uploadedByUserId     String
   status               String            @default("uploaded")
   errorMessage         String?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  uploadedBy         User              @relation(fields: [uploadedByUserId], references: [id])
-  metadata           DocumentMetadata?
-  validationReport   ValidationReport?
+  routingQueueId       String?
+  routingStatus        RoutingStatus     @default(unrouted)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  uploadedBy           User              @relation(fields: [uploadedByUserId], references: [id])
+  metadata             DocumentMetadata?
+  validationReport     ValidationReport?
 
   @@map("docflow_documents")
+}
+
+model RoutingRule {
+  id            String   @id @default(uuid())
+  name          String
+  documentType  String?
+  departmentTag String?
+  priority      Int
+  targetQueue   String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("routing_rules")
 }
 
 model DocumentMetadata {
