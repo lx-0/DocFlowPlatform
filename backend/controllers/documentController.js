@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
 const prisma = require('../src/db/client');
 const { extractMetadata } = require('../services/metadataExtractor');
+const { formatDocument } = require('../services/docxFormatter');
 
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
 const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -203,4 +204,75 @@ async function downloadDocument(req, res) {
   return res.sendFile(filePath);
 }
 
-module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument, getDocumentMetadata };
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+async function formatDoc(req, res) {
+  const doc = await prisma.document.findFirst({
+    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+  });
+
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+
+  if (doc.mimeType !== DOCX_MIME) {
+    return res.status(422).json({ error: 'Only DOCX documents can be formatted.' });
+  }
+
+  const inputPath = path.join(UPLOAD_DIR, doc.storagePath);
+  if (!fs.existsSync(inputPath)) {
+    return res.status(404).json({ error: 'File not found on storage.' });
+  }
+
+  // Mark as formatting
+  await prisma.document.update({
+    where: { id: doc.id },
+    data: { status: 'formatting' },
+  });
+
+  try {
+    const formattedFilename = `formatted-${uuidv4()}.docx`;
+    const outputPath = path.join(UPLOAD_DIR, formattedFilename);
+
+    await formatDocument(inputPath, outputPath);
+
+    await prisma.document.update({
+      where: { id: doc.id },
+      data: { status: 'formatted', formattedStoragePath: formattedFilename },
+    });
+
+    return res.json({ message: 'Document formatted successfully.', documentId: doc.id, status: 'formatted' });
+  } catch (err) {
+    await prisma.document.update({
+      where: { id: doc.id },
+      data: { status: 'formatting_failed', errorMessage: err.message },
+    });
+    return res.status(500).json({ error: 'Formatting failed.', details: err.message });
+  }
+}
+
+async function downloadFormattedDocument(req, res) {
+  const doc = await prisma.document.findFirst({
+    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+  });
+
+  if (!doc) {
+    return res.status(404).json({ error: 'Document not found.' });
+  }
+
+  if (!doc.formattedStoragePath) {
+    return res.status(404).json({ error: 'Formatted document not available. Run POST /format first.' });
+  }
+
+  const filePath = path.join(UPLOAD_DIR, doc.formattedStoragePath);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Formatted file not found on storage.' });
+  }
+
+  const formattedFilename = `formatted-${doc.originalFilename.replace(/\.docx$/i, '')}.docx`;
+  res.setHeader('Content-Disposition', `attachment; filename="${formattedFilename}"`);
+  res.setHeader('Content-Type', DOCX_MIME);
+  return res.sendFile(filePath);
+}
+
+module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument, getDocumentMetadata, formatDoc, downloadFormattedDocument };

@@ -26,10 +26,11 @@ model Document {
   originalFilename   String
   mimeType           String
   sizeBytes          Int
-  storagePath        String
-  uploadedByUserId   String
-  status             String            @default("uploaded")
-  errorMessage       String?
+  storagePath          String
+  formattedStoragePath String?
+  uploadedByUserId     String
+  status               String            @default("uploaded")
+  errorMessage         String?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   uploadedBy         User              @relation(fields: [uploadedByUserId], references: [id])
