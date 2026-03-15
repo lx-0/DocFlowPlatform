@@ -6,6 +6,7 @@ Express-based REST API for the DocFlow Platform.
 
 - Node.js >= 18
 - npm
+- PostgreSQL >= 14
 
 ## Setup
 
@@ -15,7 +16,37 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` to set your environment variables (defaults work for local dev).
+Edit `.env` and set `DATABASE_URL` to your local PostgreSQL connection string:
+
+```
+DATABASE_URL="postgresql://postgres:password@localhost:5432/docflow"
+```
+
+## Database Setup
+
+The project uses [Prisma](https://www.prisma.io/) as the ORM with PostgreSQL.
+
+### First-time setup (development)
+
+```bash
+# Generate Prisma client
+npm run db:generate
+
+# Apply migrations to your local database
+npm run db:migrate:dev
+```
+
+### Apply migrations (production / CI)
+
+```bash
+npm run db:migrate
+```
+
+### Explore data with Prisma Studio
+
+```bash
+npm run db:studio
+```
 
 ## Running the Dev Server
 
@@ -38,15 +69,20 @@ Returns `200 OK` with `{ "status": "ok" }` when the server is running.
 ```
 backend/
 ├── src/
-│   ├── index.js         # Entry point — loads env and starts server
-│   └── app.js           # Express app setup
-├── routes/              # Route definitions
+│   ├── index.js             # Entry point — loads env and starts server
+│   ├── app.js               # Express app setup
+│   ├── db/
+│   │   └── client.js        # Prisma client singleton
+│   └── generated/           # Auto-generated Prisma client (do not edit)
+├── prisma/
+│   ├── schema.prisma        # Database schema definition
+│   └── migrations/          # Migration history
+├── routes/                  # Route definitions
 │   └── health.js
-├── controllers/         # Request handlers
+├── controllers/             # Request handlers
 │   └── healthController.js
-├── models/              # Data models
-├── middleware/          # Custom middleware
-├── config/              # Configuration files
-├── .env.example         # Example environment variables
+├── models/                  # Data models
+├── middleware/              # Custom middleware
+├── .env.example             # Example environment variables
 └── package.json
 ```

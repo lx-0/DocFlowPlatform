@@ -15,13 +15,31 @@ DocFlow Platform ensures consistent formatting conventions (including proper cov
 ## Tech Stack
 
 - **Backend**: Node.js / Express
+- **Database**: PostgreSQL with Prisma ORM
 - **Frontend**: React
 - **Authentication**: JWT-based (email + password; SSO in M4)
 - **CI**: GitHub Actions
 
 ## Getting Started
 
-> Setup instructions will be added as the project scaffold is built (M1).
+### Prerequisites
+
+- Node.js >= 18
+- PostgreSQL >= 14
+
+### Backend setup
+
+```bash
+cd backend
+npm install
+cp .env.example .env
+# Edit .env — set DATABASE_URL to your local PostgreSQL connection string
+npm run db:generate
+npm run db:migrate:dev
+npm run dev
+```
+
+See [`backend/README.md`](backend/README.md) for full details.
 
 ## Project Structure
 
