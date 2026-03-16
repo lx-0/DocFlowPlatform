@@ -182,3 +182,56 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+// ─── Analytics metric models ─────────────────────────────────────────────────
+
+/// Per-document lifecycle event timestamps, populated when a document
+/// transitions through the pipeline.
+model DocumentMetric {
+  id               String    @id @default(uuid())
+  documentId       String    @unique
+  submittedAt      DateTime
+  routedAt         DateTime?
+  firstReviewedAt  DateTime?
+  approvedAt       DateTime?
+  rejectedAt       DateTime?
+  processingTimeMs Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([submittedAt])
+  @@map("document_metrics")
+}
+
+/// Daily rollup of approver activity.
+model ApproverMetric {
+  id                String   @id @default(uuid())
+  approverId        String
+  date              DateTime @db.Date
+  assigned          Int      @default(0)
+  approved          Int      @default(0)
+  rejected          Int      @default(0)
+  avgResponseTimeMs Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([approverId, date])
+  @@index([date])
+  @@map("approver_metrics")
+}
+
+/// Daily rollup of routing queue throughput and wait times.
+model QueueMetric {
+  id           String   @id @default(uuid())
+  queueId      String
+  date         DateTime @db.Date
+  documentsIn  Int      @default(0)
+  documentsOut Int      @default(0)
+  avgWaitTimeMs Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([queueId, date])
+  @@index([date])
+  @@map("queue_metrics")
+}

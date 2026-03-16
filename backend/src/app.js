@@ -6,8 +6,11 @@ const documentRoutes = require('../routes/documents');
 const routingRulesRoutes = require('../routes/routingRules');
 const approvalsRoutes = require('../routes/approvals');
 const adminRoutes = require('../routes/admin');
+const metricsAggregator = require('../jobs/metricsAggregator');
 
 const app = express();
+
+metricsAggregator.register();
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
