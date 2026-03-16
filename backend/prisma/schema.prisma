@@ -10,11 +10,44 @@ datasource db {
   provider = "postgresql"
 }
 
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String     @unique
   passwordHash String
   role         String     @default("user")
+  roleId       String?
+  roleRef      Role?      @relation(fields: [roleId], references: [id])
   createdAt    DateTime   @default(now())
   documents    Document[]
 
