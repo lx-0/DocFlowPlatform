@@ -67,11 +67,13 @@ docflow-platform/
 
 | # | Milestone | Status |
 |:--|:----------|:-------|
-| M1 | Foundation & Infrastructure | active |
-| M2 | Document Ingestion & Formatting Engine | planned |
-| M3 | Routing & Approval Workflow | planned |
-| M4 | Enterprise Integration & Security | planned |
+| M1 | Foundation & Infrastructure | complete |
+| M2 | Document Ingestion & Formatting Engine | complete |
+| M3 | Routing & Approval Workflow | complete |
+| M4 | Enterprise Integration & Security | complete |
 | M5 | Analytics & Reporting | planned |
+
+**M4 — Enterprise Integration & Security** ships Role-Based Access Control, SAML 2.0/OIDC and LDAP/Active Directory Single Sign-On, a full audit trail, and a versioned public REST API. See the [M4 release notes](docs/releases/m4-release-notes.md) and [CHANGELOG](CHANGELOG.md) for details.
 
 ## Documentation
 
@@ -124,6 +126,13 @@ External systems can submit documents, poll status, and download results using t
 1. An admin generates an API key at `/admin/api-keys`.
 2. Include the key as `Authorization: ApiKey <key>` on all requests.
 3. `POST /api/v1/documents` to submit a file, poll `GET /api/v1/documents/:id` for status, then `GET /api/v1/documents/:id/download` once complete.
+
+### Releases
+
+| Document | Description |
+|:---------|:------------|
+| [CHANGELOG.md](CHANGELOG.md) | Full changelog following Keep a Changelog format |
+| [docs/releases/m4-release-notes.md](docs/releases/m4-release-notes.md) | M4 milestone release notes — enterprise features and upgrade guide |
 
 ## Contributing
 
