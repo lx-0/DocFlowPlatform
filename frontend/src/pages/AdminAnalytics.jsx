@@ -43,6 +43,9 @@ export default function AdminAnalytics() {
   const [error, setError] = useState('')
   const [exportingCsv, setExportingCsv] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
+  const [bottleneckQueues, setBottleneckQueues] = useState([])
+  const [bottleneckApprovers, setBottleneckApprovers] = useState([])
+  const [bottleneckThresholdHours, setBottleneckThresholdHours] = useState(48)
 
   useEffect(() => {
     const t = localStorage.getItem('token')
@@ -61,10 +64,11 @@ export default function AdminAnalytics() {
     setError('')
     try {
       const params = new URLSearchParams({ from: r.from, to: r.to })
-      const [volRes, appRes, rejRes] = await Promise.all([
+      const [volRes, appRes, rejRes, bnRes] = await Promise.all([
         fetch(`/api/admin/analytics/volume?${params}`, { headers: { Authorization: `Bearer ${t}` } }),
         fetch(`/api/admin/analytics/approval-time?${params}`, { headers: { Authorization: `Bearer ${t}` } }),
         fetch(`/api/admin/analytics/rejection-rate?${params}`, { headers: { Authorization: `Bearer ${t}` } }),
+        fetch(`/api/admin/analytics/bottlenecks?${params}`, { headers: { Authorization: `Bearer ${t}` } }),
       ])
       if (volRes.status === 401 || appRes.status === 401 || rejRes.status === 401) { navigate('/login'); return }
       if (volRes.status === 403 || appRes.status === 403 || rejRes.status === 403) { navigate('/dashboard'); return }
@@ -79,6 +83,12 @@ export default function AdminAnalytics() {
         ...r,
         ratePercent: r.rejectionRate != null ? parseFloat((r.rejectionRate * 100).toFixed(1)) : null,
       })))
+      if (bnRes.ok) {
+        const bn = await bnRes.json()
+        setBottleneckQueues(bn.queues || [])
+        setBottleneckApprovers(bn.approvers || [])
+        setBottleneckThresholdHours(bn.thresholdHours || 48)
+      }
     } catch {
       setError('Failed to load analytics data.')
     } finally {
@@ -315,12 +325,91 @@ export default function AdminAnalytics() {
                   </div>
                 )}
               </div>
+
+              {/* Bottlenecks section */}
+              <div style={styles.section}>
+                <h2 style={styles.sectionTitle}>Bottlenecks</h2>
+                <p style={styles.emptyText}>
+                  Showing queues/approvers exceeding {bottleneckThresholdHours}h avg wait
+                </p>
+                {bottleneckQueues.length === 0 && bottleneckApprovers.length === 0 ? (
+                  <p style={styles.emptyText}>No bottlenecks detected in this period 🎉</p>
+                ) : (
+                  <div style={styles.bottleneckTables}>
+                    <div style={styles.bottleneckTable}>
+                      <h3 style={styles.bottleneckTableTitle}>Slow Queues</h3>
+                      {bottleneckQueues.length === 0 ? (
+                        <p style={styles.emptyText}>None</p>
+                      ) : (
+                        <table style={styles.table}>
+                          <thead>
+                            <tr>
+                              <th style={styles.th}>Queue</th>
+                              <th style={styles.th}>Avg Wait</th>
+                              <th style={styles.th}>Documents</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bottleneckQueues.map(q => {
+                              const isHigh = q.avgWaitTimeMs > bottleneckThresholdHours * 2 * 3600000
+                              return (
+                                <tr key={q.queueId} style={isHigh ? styles.rowHigh : styles.rowWarn}>
+                                  <td style={styles.td}>{q.name}</td>
+                                  <td style={styles.td}>{formatWaitTime(q.avgWaitTimeMs)}</td>
+                                  <td style={styles.td}>{q.documentCount}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                    <div style={styles.bottleneckTable}>
+                      <h3 style={styles.bottleneckTableTitle}>Slow Approvers</h3>
+                      {bottleneckApprovers.length === 0 ? (
+                        <p style={styles.emptyText}>None</p>
+                      ) : (
+                        <table style={styles.table}>
+                          <thead>
+                            <tr>
+                              <th style={styles.th}>Approver</th>
+                              <th style={styles.th}>Avg Wait</th>
+                              <th style={styles.th}>Documents</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bottleneckApprovers.map(a => {
+                              const isHigh = a.avgResponseTimeMs > bottleneckThresholdHours * 2 * 3600000
+                              return (
+                                <tr key={a.approverId} style={isHigh ? styles.rowHigh : styles.rowWarn}>
+                                  <td style={styles.td}>{a.name}</td>
+                                  <td style={styles.td}>{formatWaitTime(a.avgResponseTimeMs)}</td>
+                                  <td style={styles.td}>{a.documentCount}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
       </main>
     </div>
   )
+}
+
+function formatWaitTime(ms) {
+  const totalHours = Math.round(ms / 3600000)
+  const days = Math.floor(totalHours / 24)
+  const hours = totalHours % 24
+  if (days === 0) return `${hours}h`
+  if (hours === 0) return `${days}d`
+  return `${days}d ${hours}h`
 }
 
 const tooltipStyle = {
@@ -458,4 +547,18 @@ const styles = {
     boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
     padding: '1.5rem 1rem 1rem',
   },
+  bottleneckTables: { display: 'flex', gap: '1.5rem', flexWrap: 'wrap' },
+  bottleneckTable: {
+    flex: '1 1 300px',
+    background: '#fff',
+    borderRadius: '10px',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+    padding: '1.25rem 1.5rem',
+  },
+  bottleneckTableTitle: { fontSize: '0.875rem', fontWeight: 600, color: '#374151', marginBottom: '0.75rem' },
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' },
+  th: { textAlign: 'left', padding: '0.4rem 0.5rem', color: '#6b7280', fontWeight: 600, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid #e5e7eb' },
+  td: { padding: '0.5rem 0.5rem', color: '#111827', borderBottom: '1px solid #f3f4f6' },
+  rowWarn: { background: '#fffbeb' },
+  rowHigh: { background: '#fef2f2' },
 }

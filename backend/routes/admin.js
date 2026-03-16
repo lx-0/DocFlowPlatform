@@ -9,7 +9,7 @@ const { authenticate } = require('../middleware/auth');
 const { requirePermission, invalidateRoleCache } = require('../middleware/rbac');
 const prisma = require('../src/db/client');
 const { logEvent } = require('../services/auditLog');
-const { getVolumeStats, getApprovalTimeStats, getRejectionRate } = require('../services/analytics');
+const { getVolumeStats, getApprovalTimeStats, getRejectionRate, getBottleneckQueues, getBottleneckApprovers } = require('../services/analytics');
 
 // All admin routes require authentication first
 
@@ -248,6 +248,25 @@ router.get('/analytics/rejection-rate', authenticate, requirePermission('admin:u
   } catch (err) {
     console.error('[Admin] GET /analytics/rejection-rate error:', err);
     res.status(500).json({ error: 'Failed to fetch rejection rate stats' });
+  }
+});
+
+router.get('/analytics/bottlenecks', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const thresholdHours = parseFloat(process.env.ANALYTICS_BOTTLENECK_THRESHOLD_HOURS) || 48;
+    const thresholdMs = thresholdHours * 60 * 60 * 1000;
+
+    const [queues, approvers] = await Promise.all([
+      getBottleneckQueues({ from, to, threshold: thresholdMs }),
+      getBottleneckApprovers({ from, to, threshold: thresholdMs }),
+    ]);
+
+    res.json({ thresholdHours, queues, approvers });
+  } catch (err) {
+    console.error('[Admin] GET /analytics/bottlenecks error:', err);
+    res.status(500).json({ error: 'Failed to fetch bottleneck data' });
   }
 });
 

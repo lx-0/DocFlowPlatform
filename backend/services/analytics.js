@@ -114,30 +114,90 @@ async function getRejectionRate({ from, to }) {
  * Returns routing queues whose average wait time exceeds the given threshold.
  *
  * @param {{ from: Date, to: Date, threshold: number }} params - threshold in ms
- * @returns {Promise<Array<{ queueId: string, avgWaitTimeMs: number }>>}
+ * @returns {Promise<Array<{ queueId: string, name: string, avgWaitTimeMs: number, documentCount: number }>>}
  */
 async function getBottleneckQueues({ from, to, threshold }) {
   const rows = await prisma.queueMetric.findMany({
     where: {
       date: { gte: from, lte: to },
-      avgWaitTimeMs: { not: null, gt: threshold },
+      avgWaitTimeMs: { not: null },
     },
-    select: { queueId: true, avgWaitTimeMs: true },
+    select: { queueId: true, avgWaitTimeMs: true, documentsIn: true },
   });
 
   // Average across days per queue
   const byQueue = new Map();
   for (const row of rows) {
-    if (!byQueue.has(row.queueId)) byQueue.set(row.queueId, { sum: 0, count: 0 });
+    if (!byQueue.has(row.queueId)) byQueue.set(row.queueId, { sum: 0, count: 0, documentCount: 0 });
     const bucket = byQueue.get(row.queueId);
-    bucket.sum += row.avgWaitTimeMs;
-    bucket.count += 1;
+    if (row.avgWaitTimeMs != null) {
+      bucket.sum += row.avgWaitTimeMs;
+      bucket.count += 1;
+    }
+    bucket.documentCount += row.documentsIn;
   }
 
   return [...byQueue.entries()]
-    .map(([queueId, { sum, count }]) => ({ queueId, avgWaitTimeMs: Math.round(sum / count) }))
+    .map(([queueId, { sum, count, documentCount }]) => ({
+      queueId,
+      name: queueId,
+      avgWaitTimeMs: count > 0 ? Math.round(sum / count) : 0,
+      documentCount,
+    }))
     .filter(r => r.avgWaitTimeMs > threshold)
     .sort((a, b) => b.avgWaitTimeMs - a.avgWaitTimeMs);
 }
 
-module.exports = { getVolumeStats, getApprovalTimeStats, getRejectionRate, getBottleneckQueues };
+/**
+ * Returns approvers whose average response time exceeds the given threshold.
+ *
+ * @param {{ from: Date, to: Date, threshold: number }} params - threshold in ms
+ * @returns {Promise<Array<{ approverId: string, name: string, avgResponseTimeMs: number, documentCount: number }>>}
+ */
+async function getBottleneckApprovers({ from, to, threshold }) {
+  const rows = await prisma.approverMetric.findMany({
+    where: {
+      date: { gte: from, lte: to },
+      avgResponseTimeMs: { not: null },
+    },
+    select: { approverId: true, avgResponseTimeMs: true, assigned: true },
+  });
+
+  // Average across days per approver
+  const byApprover = new Map();
+  for (const row of rows) {
+    if (!byApprover.has(row.approverId)) byApprover.set(row.approverId, { sum: 0, count: 0, documentCount: 0 });
+    const bucket = byApprover.get(row.approverId);
+    if (row.avgResponseTimeMs != null) {
+      bucket.sum += row.avgResponseTimeMs;
+      bucket.count += 1;
+    }
+    bucket.documentCount += row.assigned;
+  }
+
+  const bottlenecks = [...byApprover.entries()]
+    .map(([approverId, { sum, count, documentCount }]) => ({
+      approverId,
+      avgResponseTimeMs: count > 0 ? Math.round(sum / count) : 0,
+      documentCount,
+    }))
+    .filter(r => r.avgResponseTimeMs > threshold)
+    .sort((a, b) => b.avgResponseTimeMs - a.avgResponseTimeMs);
+
+  if (bottlenecks.length === 0) return [];
+
+  // Resolve approver names from User table
+  const approverIds = bottlenecks.map(b => b.approverId);
+  const users = await prisma.user.findMany({
+    where: { id: { in: approverIds } },
+    select: { id: true, email: true },
+  });
+  const userMap = new Map(users.map(u => [u.id, u.email]));
+
+  return bottlenecks.map(b => ({
+    ...b,
+    name: userMap.get(b.approverId) || b.approverId,
+  }));
+}
+
+module.exports = { getVolumeStats, getApprovalTimeStats, getRejectionRate, getBottleneckQueues, getBottleneckApprovers };
