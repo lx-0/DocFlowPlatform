@@ -71,7 +71,9 @@ docflow-platform/
 | M2 | Document Ingestion & Formatting Engine | complete |
 | M3 | Routing & Approval Workflow | complete |
 | M4 | Enterprise Integration & Security | complete |
-| M5 | Analytics & Reporting | planned |
+| M5 | Analytics & Reporting | in progress |
+
+**M5 — Analytics & Reporting** delivers the analytics dashboard, bottleneck detection, data export (CSV/PDF), and configurable data retention. See the [M5 release notes](docs/releases/m5-analytics-reporting.md) for details.
 
 **M4 — Enterprise Integration & Security** ships Role-Based Access Control, SAML 2.0/OIDC and LDAP/Active Directory Single Sign-On, a full audit trail, and a versioned public REST API. See the [M4 release notes](docs/releases/m4-release-notes.md) and [CHANGELOG](CHANGELOG.md) for details.
 
@@ -142,6 +144,7 @@ External systems can submit documents, poll status, and download results using t
 |:---------|:------------|
 | [CHANGELOG.md](CHANGELOG.md) | Full changelog following Keep a Changelog format |
 | [docs/releases/m4-release-notes.md](docs/releases/m4-release-notes.md) | M4 milestone release notes — enterprise features and upgrade guide |
+| [docs/releases/m5-analytics-reporting.md](docs/releases/m5-analytics-reporting.md) | M5 milestone release notes — Analytics & Reporting |
 
 ## Contributing
 
