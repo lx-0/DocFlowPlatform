@@ -127,6 +127,14 @@ External systems can submit documents, poll status, and download results using t
 2. Include the key as `Authorization: ApiKey <key>` on all requests.
 3. `POST /api/v1/documents` to submit a file, poll `GET /api/v1/documents/:id` for status, then `GET /api/v1/documents/:id/download` once complete.
 
+### Operations
+
+| Document | Description |
+|:---------|:------------|
+| [docs/ops/deployment.md](docs/ops/deployment.md) | Production deployment guide — system requirements, env vars, step-by-step setup, Nginx config |
+| [docs/ops/backup-and-recovery.md](docs/ops/backup-and-recovery.md) | Backup strategy and recovery procedures for database and uploaded files |
+| [docs/ops/troubleshooting.md](docs/ops/troubleshooting.md) | Common startup errors, log access, admin password reset |
+
 ### Releases
 
 | Document | Description |
