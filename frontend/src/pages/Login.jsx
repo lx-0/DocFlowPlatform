@@ -1,19 +1,47 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
+
+const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || 'local'
+
+const SSO_ERROR_MESSAGES = {
+  access_denied: 'Access was denied. Please contact your administrator.',
+  invalid_state: 'Invalid login session. Please try again.',
+  callback_failed: 'SSO login failed. Please try again.',
+}
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Handle SSO callback: extract ?token= or ?error= from URL
+  useEffect(() => {
+    if (AUTH_MODE !== 'sso') return
+    const params = new URLSearchParams(location.search)
+    const token = params.get('token')
+    const err = params.get('error')
+    if (token) {
+      localStorage.setItem('token', token)
+      navigate('/dashboard')
+    } else if (err) {
+      setError(SSO_ERROR_MESSAGES[err] || `SSO login failed: ${err}`)
+    }
+  }, [])
+
+  function handleSSOLogin() {
+    window.location.href = '/api/auth/sso/login'
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setLoading(true)
+    const endpoint = AUTH_MODE === 'ldap' ? '/api/auth/ldap/login' : '/api/auth/login'
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -27,6 +55,21 @@ export default function Login() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (AUTH_MODE === 'sso') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.card}>
+          <h1 style={styles.title}>DocFlow</h1>
+          <p style={styles.subtitle}>Sign in to your account</p>
+          {error && <p style={styles.error}>{error}</p>}
+          <button onClick={handleSSOLogin} style={styles.button}>
+            Sign in with SSO
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
