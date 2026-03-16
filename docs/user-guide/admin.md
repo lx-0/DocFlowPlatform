@@ -226,7 +226,7 @@ See [docs/admin/audit-logs.md](../admin/audit-logs.md) for the full reference in
 
 ### Log retention
 
-Audit events currently accumulate indefinitely. Monitor the `audit_logs` table size in PostgreSQL for high-traffic deployments and plan a retention strategy accordingly.
+Audit log records are automatically purged by the nightly retention job according to the `auditLogRetentionDays` setting (default: 90 days). See [Section 6 — Settings: Retention Policy](#6-settings--retention-policy) for how to configure this. For the full reference including compliance queries, see [docs/admin/audit-logs.md](../admin/audit-logs.md).
 
 ---
 
@@ -250,14 +250,66 @@ Detailed setup instructions:
 
 ## 5. Analytics Dashboard
 
-The Dashboard (`/dashboard`) shows summary statistics: document count, pending approvals, and completed items.
+Navigate to **Admin → Analytics** (`/admin/analytics`) to open the analytics dashboard. The dashboard is restricted to users with the `admin` role.
 
-> **Status:** Live stat queries are planned for a future milestone. The current dashboard shows placeholder values (`—`).
+### Summary cards
+
+Five at-a-glance metrics appear at the top: **Submitted**, **Approved**, **Rejected**, **Rejection Rate**, and **Avg Approval Time** — all calculated across the selected date range.
+
+### Charts
+
+Three chart panels show workflow performance over the selected date range:
+
+| Panel | What it shows |
+|:------|:-------------|
+| **Processing Volume** | Daily document counts — submitted, approved, and rejected |
+| **Approval Time** | Average days-to-approval per day; rising trends indicate reviewer overload |
+| **Rejection Rate** | Daily rejection rate as a percentage of all decisions |
+
+**Date range controls:** Use the preset buttons (**7d**, **30d**, **90d**) or the custom date picker to change the reporting window. All panels update simultaneously.
+
+### Bottleneck Detection
+
+The **Bottlenecks** section below the charts shows routing queues and individual approvers whose average processing time exceeds the configured threshold (default: 48 hours). Rows between 1× and 2× the threshold are highlighted **amber**; rows exceeding **2× the threshold** are highlighted **red**. When no bottlenecks are detected, the section displays a confirmation message.
+
+### Exporting Data
+
+Two export buttons appear at the top of the analytics page:
+
+| Format | Button | Use case |
+|:-------|:-------|:---------|
+| **CSV** | Export CSV | Spreadsheet analysis; filename `docflow-report-{from}-{to}.csv` |
+| **PDF** | Export PDF | Compliance reporting; filename `docflow-report-{from}-{to}.pdf` |
+
+Both exports respect the selected date range. A loading spinner is shown while the file is generated.
+
+For the full analytics reference including API endpoints and chart interpretation guidance, see [docs/admin/analytics-reporting.md](../admin/analytics-reporting.md).
 
 ---
 
 ## 6. Settings — Retention Policy
 
-Document and audit log retention configuration is planned for a future release. There is currently no automated pruning. All uploaded files and audit events are stored indefinitely.
+Navigate to **Admin → Settings** (`/admin/settings`) to configure how long documents and audit logs are retained before automatic purging.
 
-For urgent data removal needs, contact your database administrator to remove records directly from PostgreSQL.
+### Retention settings
+
+| Setting | Default | Description |
+|:--------|:--------|:------------|
+| **Document Retention (days)** | 365 | Days after which completed (`approved` or `rejected`) documents are soft-deleted. Set to `0` to disable automatic document purging. |
+| **Audit Log Retention (days)** | 90 | Days after which audit log records are permanently deleted. Minimum value: `1`. |
+
+To update: enter new values in the **Retention** section and click **Save**. Changes take effect on the next nightly purge run (03:00 server time).
+
+### Monitoring purge runs
+
+The settings page shows:
+
+- **Last purge** — timestamp of the most recent purge run
+- **Documents archived** — documents soft-deleted in the last run
+- **Logs deleted** — audit log records deleted in the last run
+
+If the last-purge timestamp is more than 25 hours old, the nightly cron job may not be running — check the server logs.
+
+> **Warning:** Reducing `auditLogRetentionDays` on a production system will delete older audit records permanently at the next 03:00 run. Confirm your compliance requirements before lowering this value.
+
+For the full reference including compliance implications and example policy configurations, see [docs/admin/retention-purge.md](../admin/retention-purge.md).

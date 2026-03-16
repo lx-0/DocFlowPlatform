@@ -2,7 +2,7 @@
 
 The Analytics & Reporting features give DocFlow administrators visibility into document workflow performance — how many documents are being processed, how long approvals take, where bottlenecks form, and how to export data for compliance reporting.
 
-> **M5 status:** Report export (`/api/admin/analytics/export`), retention policy settings (`/admin/settings`), and the `/admin/analytics` dashboard (volume, approval time, and rejection rate charts) are live. Bottleneck detection is in progress.
+> **M5 — live:** All analytics features (dashboard, charts, bottleneck detection, export, and retention settings) are available as of Milestone 5.
 
 ---
 
@@ -14,7 +14,23 @@ You must be logged in as a user with the `admin` role. All analytics pages and A
 
 ## Analytics Dashboard — `/admin/analytics`
 
-Navigate to **Admin → Analytics** in the sidebar to open the dashboard. The dashboard presents three chart panels and a bottleneck detection section.
+Navigate to **Admin → Analytics** in the sidebar to open the dashboard. The dashboard presents a summary strip, three chart panels, and a bottleneck detection section.
+
+### Summary Cards
+
+Five at-a-glance metrics appear at the top of the page, calculated across the full selected date range:
+
+| Card | Description |
+|:-----|:------------|
+| **Submitted** | Total documents submitted |
+| **Approved** | Total documents approved |
+| **Rejected** | Total documents rejected |
+| **Rejection Rate** | Overall rejection rate as a percentage (`rejected / (approved + rejected)`) |
+| **Avg Approval Time** | Average days from submission to approval across all approved documents |
+
+Values show `—` when there is no data for the selected period.
+
+---
 
 ### Date Range Controls
 
@@ -36,7 +52,7 @@ Changing the date range reloads all panels simultaneously.
 **What it shows:** Daily document counts — how many documents were submitted, approved, and rejected on each day within the selected range.
 
 **How to read it:**
-- Each day is shown as a bar or line with three values: Submitted, Approved, Rejected.
+- Each day is shown as a grouped bar with three series: Submitted (blue), Approved (green), Rejected (red).
 - A rising Submitted count indicates increasing workflow load.
 - A widening gap between Submitted and Approved may indicate a processing backlog.
 - Spikes in Rejected can indicate upstream quality issues or policy changes.
@@ -99,8 +115,9 @@ Lists individual approvers whose average response time exceeds the threshold.
 
 The threshold is displayed above the tables (e.g., "Showing queues/approvers exceeding 48h avg wait").
 
-- Rows where avg wait exceeds **1× threshold**: shown normally.
-- Rows where avg wait exceeds **2× threshold**: highlighted in **amber/red** for immediate attention.
+- All rows in the table exceed the threshold (the API only returns over-threshold entries).
+- Rows between **1× and 2× threshold**: highlighted with an **amber** background.
+- Rows exceeding **2× threshold**: highlighted in **red** for immediate attention.
 - If no queues or approvers exceed the threshold: the section shows "No bottlenecks detected in this period 🎉"
 
 **Configuring the threshold:** The threshold is set via the `ANALYTICS_BOTTLENECK_THRESHOLD_HOURS` environment variable on the backend server. The default is **48 hours**. Restart the server after changing this value.

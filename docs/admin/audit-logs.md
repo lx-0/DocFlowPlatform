@@ -195,6 +195,6 @@ curl -H "Authorization: Bearer <token>" \
 
 ## Log Retention Policy
 
-**Known limitation:** The audit log currently has no automatic pruning or archival. All events accumulate indefinitely. For high-traffic deployments, monitor table size and plan for a retention strategy before this becomes a storage concern.
+Audit log retention is configured via **Admin → Settings** (`auditLogRetentionDays`, default 90 days). The nightly purge job (03:00 server time) permanently hard-deletes records older than this threshold. This deletion is irreversible — ensure the window meets your compliance requirements before reducing it.
 
-Future work may add configurable retention windows (e.g. keep 90 days) and export-to-S3 archival.
+See the [Retention & Purge Policy Admin Guide](retention-purge.md) for full configuration details, compliance guidance, and example policies.

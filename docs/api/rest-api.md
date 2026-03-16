@@ -49,7 +49,7 @@ When the limit is exceeded, the server responds with:
 
 ```json
 {
-  "error": "Too many requests. Limit: 100 requests per minute."
+  "error": "Rate limit exceeded. Max 100 requests per minute per API key."
 }
 ```
 
@@ -114,8 +114,10 @@ print(f"Submitted document: {document_id}, status: {data['status']}")
 {
   "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "originalFilename": "invoice-q1.pdf",
+  "mimeType": "application/pdf",
+  "sizeBytes": 204800,
   "status": "uploaded",
-  "createdAt": "2026-03-16T12:00:00.000Z"
+  "submittedAt": "2026-03-16T12:00:00.000Z"
 }
 ```
 
@@ -162,33 +164,50 @@ curl https://docflow.example.com/api/v1/documents/a1b2c3d4-... \
   "mimeType": "application/pdf",
   "sizeBytes": 204800,
   "status": "cover_sheet_applied",
-  "stage": "cover_sheet",
-  "progress": 100,
   "routingStatus": "approved",
-  "errors": [],
+  "errorMessage": null,
   "createdAt": "2026-03-16T12:00:00.000Z",
-  "updatedAt": "2026-03-16T12:01:30.000Z"
+  "updatedAt": "2026-03-16T12:01:30.000Z",
+  "metadata": {
+    "title": "Q1 Invoice",
+    "author": "Alice",
+    "documentType": "invoice",
+    "pageCount": 3,
+    "wordCount": 412,
+    "extractedAt": "2026-03-16T12:00:05.000Z"
+  },
+  "approvalWorkflow": {
+    "id": "wf_123...",
+    "queueName": "Finance Review",
+    "currentStep": 2,
+    "totalSteps": 2,
+    "status": "approved"
+  }
 }
 ```
 
+`metadata` and `approvalWorkflow` are `null` until the respective pipeline stages complete.
+
 **`status` field values**
 
-The `status` field tracks the document through each pipeline stage:
+The `status` field tracks the document through its processing pipeline:
 
-| Status | Stage | Progress | Description |
-|:-------|:------|:---------|:------------|
-| `uploaded` | upload | 5% | Document received, pipeline starting |
-| `extracting_metadata` | metadata_extraction | 20% | Extracting title, author, page count |
-| `metadata_failed` | metadata_extraction | 20% | Metadata extraction error |
-| `validating` | format_validation | 40% | Checking format rules |
-| `validation_failed` | format_validation | 40% | Format validation error |
-| `validated` | format_validation | 50% | Validation passed |
-| `formatting` | formatting | 65% | Applying standard formatting |
-| `formatting_failed` | formatting | 65% | Formatting error |
-| `formatted` | formatting | 75% | Formatting complete |
-| `applying_cover_sheet` | cover_sheet | 90% | Generating cover sheet |
-| `cover_sheet_failed` | cover_sheet | 90% | Cover sheet generation error |
-| `cover_sheet_applied` | cover_sheet | 100% | Processing complete |
+| Status | Description |
+|:-------|:------------|
+| `uploaded` | Document received, pipeline starting |
+| `extracting_metadata` | Extracting title, author, page count |
+| `metadata_failed` | Metadata extraction error |
+| `validating` | Checking format rules |
+| `validation_failed` | Format validation error |
+| `validated` | Validation passed |
+| `formatting` | Applying standard formatting |
+| `formatting_failed` | Formatting error |
+| `formatted` | Formatting complete |
+| `applying_cover_sheet` | Generating cover sheet |
+| `cover_sheet_failed` | Cover sheet generation error |
+| `cover_sheet_applied` | Processing complete |
+
+Terminal error statuses (`*_failed`) will have a description in the `errorMessage` field.
 
 **`routingStatus` field values**
 
@@ -371,7 +390,16 @@ print(f"Downloaded: {filename}")
 
 ---
 
+## Webhooks (Coming Soon)
+
+Webhook event delivery for the public API is planned. Once available, DocFlow will push status change events to your configured endpoint, eliminating the need to poll `GET /api/v1/documents/:id`.
+
+See the [webhook feature backlog item](https://github.com/your-org/docflow/issues) for status updates.
+
+---
+
 ## Related
 
+- [Integration Quickstart](quickstart.md) — step-by-step guide to your first integration
 - [API Key Management](api-key-management.md) — how admins create and revoke API keys
 - [docs/api-reference.md](../api-reference.md) — internal REST API (JWT-authenticated, for the DocFlow web app)
