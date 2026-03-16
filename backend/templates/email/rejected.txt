@@ -1,0 +1,14 @@
+Your Document Has Been Rejected
+================================
+
+Your document has been reviewed and rejected.
+
+Document:    {{documentTitle}}
+Document ID: {{documentId}}
+Status:      Rejected
+{{reasonLine}}
+View your documents at:
+  /submitter/status
+
+---
+This is an automated notification from DocFlow.

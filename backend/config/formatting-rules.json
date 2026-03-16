@@ -1,0 +1,24 @@
+{
+  "margins": {
+    "top": 1440,
+    "right": 1440,
+    "bottom": 1440,
+    "left": 1440
+  },
+  "defaultFont": {
+    "family": "Calibri",
+    "sizePt": 11
+  },
+  "headings": {
+    "h1": { "family": "Calibri", "sizePt": 16, "bold": true },
+    "h2": { "family": "Calibri", "sizePt": 14, "bold": true },
+    "h3": { "family": "Calibri", "sizePt": 12, "bold": true }
+  },
+  "paragraphSpacing": {
+    "beforePt": 0,
+    "afterPt": 8
+  },
+  "lineSpacing": {
+    "multiple": 1.15
+  }
+}

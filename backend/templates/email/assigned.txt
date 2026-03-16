@@ -1,0 +1,13 @@
+A Document Has Been Assigned to You
+=====================================
+
+A document has been assigned to you for action.
+
+Document:    {{documentTitle}}
+Document ID: {{documentId}}
+
+View your queue at:
+  /approver/queue
+
+---
+This is an automated notification from DocFlow.

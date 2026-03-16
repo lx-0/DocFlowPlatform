@@ -2,21 +2,328 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  role         String   @default("user")
-  createdAt    DateTime @default(now())
+  id                      String                   @id @default(uuid())
+  email                   String                   @unique
+  passwordHash            String
+  role                    String                   @default("user")
+  roleId                  String?
+  roleRef                 Role?                    @relation(fields: [roleId], references: [id])
+  createdAt               DateTime                 @default(now())
+  documents               Document[]
+  apiKeys                 ApiKey[]
+  webhooks                Webhook[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
 
   @@map("users")
+}
+
+/// Per-user opt-in/out preference for each notification event type.
+model NotificationPreference {
+  id           String  @id @default(uuid())
+  userId       String
+  eventType    String
+  emailEnabled Boolean @default(true)
+  inAppEnabled Boolean @default(true)
+  user         User    @relation(fields: [userId], references: [id])
+
+  @@unique([userId, eventType])
+  @@index([userId])
+  @@map("notification_preferences")
+}
+
+/// In-app notification for a user (document lifecycle alerts).
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  linkUrl   String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     String
+  keyHash    String
+  label      String
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("api_keys")
+}
+
+enum RoutingStatus {
+  unrouted
+  queued
+  in_approval
+  approved
+  rejected
+}
+
+model Document {
+  id                   String            @id @default(uuid())
+  originalFilename     String
+  mimeType             String
+  sizeBytes            Int
+  storagePath          String
+  formattedStoragePath String?
+  finalStoragePath     String?
+  uploadedByUserId     String
+  status               String            @default("uploaded")
+  errorMessage         String?
+  routingQueueId       String?
+  routingStatus        RoutingStatus     @default(unrouted)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  deletedAt            DateTime?
+  uploadedBy           User              @relation(fields: [uploadedByUserId], references: [id])
+  metadata             DocumentMetadata?
+  validationReport     ValidationReport?
+  approvalWorkflow     ApprovalWorkflow?
+
+  @@map("docflow_documents")
+}
+
+/// Key-value store for admin-configurable system settings.
+model SystemConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_config")
+}
+
+model RoutingRule {
+  id            String   @id @default(uuid())
+  name          String
+  documentType  String?
+  departmentTag String?
+  priority      Int
+  targetQueue   String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("routing_rules")
+}
+
+model DocumentMetadata {
+  id             String    @id @default(uuid())
+  documentId     String    @unique
+  title          String?
+  author         String?
+  docCreatedAt   DateTime?
+  lastModifiedAt DateTime?
+  pageCount      Int?
+  documentType   String
+  wordCount      Int?
+  extractedAt    DateTime  @default(now())
+  document       Document  @relation(fields: [documentId], references: [id])
+
+  @@map("document_metadata")
+}
+
+model ValidationReport {
+  id          String   @id @default(uuid())
+  documentId  String   @unique
+  valid       Boolean
+  violations  Json
+  validatedAt DateTime @default(now())
+  document    Document @relation(fields: [documentId], references: [id])
+
+  @@map("document_validation_reports")
+}
+
+enum WorkflowStatus {
+  pending
+  approved
+  rejected
+  changes_requested
+}
+
+enum StepAction {
+  approved
+  rejected
+  changes_requested
+}
+
+model ApprovalWorkflow {
+  id          String         @id @default(uuid())
+  documentId  String         @unique
+  queueName   String
+  currentStep Int            @default(1)
+  totalSteps  Int
+  status      WorkflowStatus @default(pending)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  document    Document       @relation(fields: [documentId], references: [id])
+  steps       ApprovalStep[]
+
+  @@map("approval_workflows")
+}
+
+model ApprovalStep {
+  id               String           @id @default(uuid())
+  workflowId       String
+  stepNumber       Int
+  assignedToUserId String?
+  action           StepAction?
+  comment          String?
+  actedAt          DateTime?
+  workflow         ApprovalWorkflow @relation(fields: [workflowId], references: [id])
+
+  @@map("approval_steps")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  action      String
+  targetType  String
+  targetId    String
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─── Analytics metric models ─────────────────────────────────────────────────
+
+/// Per-document lifecycle event timestamps, populated when a document
+/// transitions through the pipeline.
+model DocumentMetric {
+  id               String    @id @default(uuid())
+  documentId       String    @unique
+  submittedAt      DateTime
+  routedAt         DateTime?
+  firstReviewedAt  DateTime?
+  approvedAt       DateTime?
+  rejectedAt       DateTime?
+  processingTimeMs Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([submittedAt])
+  @@map("document_metrics")
+}
+
+/// Daily rollup of approver activity.
+model ApproverMetric {
+  id                String   @id @default(uuid())
+  approverId        String
+  date              DateTime @db.Date
+  assigned          Int      @default(0)
+  approved          Int      @default(0)
+  rejected          Int      @default(0)
+  avgResponseTimeMs Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([approverId, date])
+  @@index([date])
+  @@map("approver_metrics")
+}
+
+// ─── Webhook models ───────────────────────────────────────────────────────────
+
+/// User-registered webhook endpoints that receive document lifecycle events.
+model Webhook {
+  id         String            @id @default(uuid())
+  userId     String
+  url        String
+  events     String[]
+  secret     String
+  active     Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  user       User              @relation(fields: [userId], references: [id])
+  deliveries WebhookDelivery[]
+
+  @@index([userId])
+  @@map("webhooks")
+}
+
+/// Log of individual webhook delivery attempts.
+model WebhookDelivery {
+  id           String    @id @default(uuid())
+  webhookId    String
+  event        String
+  statusCode   Int?
+  attemptCount Int       @default(0)
+  deliveredAt  DateTime?
+  createdAt    DateTime  @default(now())
+  webhook      Webhook   @relation(fields: [webhookId], references: [id])
+
+  @@index([webhookId])
+  @@map("webhook_deliveries")
+}
+
+/// Daily rollup of routing queue throughput and wait times.
+model QueueMetric {
+  id           String   @id @default(uuid())
+  queueId      String
+  date         DateTime @db.Date
+  documentsIn  Int      @default(0)
+  documentsOut Int      @default(0)
+  avgWaitTimeMs Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([queueId, date])
+  @@index([date])
+  @@map("queue_metrics")
 }

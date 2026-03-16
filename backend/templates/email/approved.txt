@@ -1,0 +1,14 @@
+Your Document Has Been Approved
+================================
+
+Your document has been reviewed and approved.
+
+Document:    {{documentTitle}}
+Document ID: {{documentId}}
+Status:      Approved
+
+View your documents at:
+  /submitter/status
+
+---
+This is an automated notification from DocFlow.

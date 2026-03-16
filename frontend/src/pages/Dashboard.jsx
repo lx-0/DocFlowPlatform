@@ -1,7 +1,18 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
+import NotificationBell from '../components/NotificationBell'
+
+function getUserRole(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1])).role
+  } catch {
+    return null
+  }
+}
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const token = localStorage.getItem('token')
+  const role = token ? getUserRole(token) : null
 
   function handleLogout() {
     localStorage.removeItem('token')
@@ -14,15 +25,24 @@ export default function Dashboard() {
         <div style={styles.logo}>DocFlow</div>
         <nav style={styles.nav}>
           <a href="#" style={{ ...styles.navItem, ...styles.navItemActive }}>Dashboard</a>
-          <a href="#" style={styles.navItem}>Documents</a>
+          <Link to="/documents" style={styles.navItem}>Documents</Link>
           <a href="#" style={styles.navItem}>Workflows</a>
-          <a href="#" style={styles.navItem}>Settings</a>
+          <Link to="/approvals" style={styles.navItem}>Approvals</Link>
+          <Link to="/settings/notifications" style={styles.navItem}>Settings</Link>
+          {role === 'admin' && (
+            <>
+              <Link to="/admin/routing-rules" style={styles.navItem}>Routing Rules</Link>
+              <Link to="/admin/users" style={styles.navItem}>Manage Users</Link>
+              <Link to="/admin/roles" style={styles.navItem}>Manage Roles</Link>
+            </>
+          )}
         </nav>
         <button onClick={handleLogout} style={styles.logoutBtn}>Sign out</button>
       </aside>
       <main style={styles.main}>
         <header style={styles.header}>
           <h1 style={styles.pageTitle}>Dashboard</h1>
+          <NotificationBell />
         </header>
         <div style={styles.content}>
           <div style={styles.statsRow}>
@@ -84,6 +104,8 @@ const styles = {
     color: '#94a3b8',
     fontSize: '0.9rem',
     fontWeight: 500,
+    textDecoration: 'none',
+    display: 'block',
   },
   navItemActive: {
     background: '#334155',
@@ -110,6 +132,9 @@ const styles = {
     padding: '1.5rem 2rem',
     borderBottom: '1px solid #e5e7eb',
     background: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   pageTitle: {
     fontSize: '1.25rem',
