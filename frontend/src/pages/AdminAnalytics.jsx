@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import {
+  BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from 'recharts'
 
 function getUserRole(token) {
   try {
@@ -12,6 +16,15 @@ function getUserRole(token) {
 function defaultDateRange() {
   const to = new Date()
   const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  }
+}
+
+function presetRange(days) {
+  const to = new Date()
+  const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
   return {
     from: from.toISOString().slice(0, 10),
     to: to.toISOString().slice(0, 10),
@@ -41,12 +54,13 @@ export default function AdminAnalytics() {
     fetchAnalytics()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function fetchAnalytics() {
+  async function fetchAnalytics(range) {
     const t = localStorage.getItem('token')
+    const r = range || dateRange
     setLoading(true)
     setError('')
     try {
-      const params = new URLSearchParams({ from: dateRange.from, to: dateRange.to })
+      const params = new URLSearchParams({ from: r.from, to: r.to })
       const [volRes, appRes, rejRes] = await Promise.all([
         fetch(`/api/admin/analytics/volume?${params}`, { headers: { Authorization: `Bearer ${t}` } }),
         fetch(`/api/admin/analytics/approval-time?${params}`, { headers: { Authorization: `Bearer ${t}` } }),
@@ -57,8 +71,14 @@ export default function AdminAnalytics() {
       if (!volRes.ok || !appRes.ok || !rejRes.ok) { setError('Failed to load analytics data.'); return }
       const [vol, app, rej] = await Promise.all([volRes.json(), appRes.json(), rejRes.json()])
       setVolumeData(vol)
-      setApprovalData(app)
-      setRejectionData(rej)
+      setApprovalData(app.map(r => ({
+        ...r,
+        avgDays: r.avgApprovalTimeMs != null ? parseFloat((r.avgApprovalTimeMs / 86400000).toFixed(2)) : null,
+      })))
+      setRejectionData(rej.map(r => ({
+        ...r,
+        ratePercent: r.rejectionRate != null ? parseFloat((r.rejectionRate * 100).toFixed(1)) : null,
+      })))
     } catch {
       setError('Failed to load analytics data.')
     } finally {
@@ -93,6 +113,12 @@ export default function AdminAnalytics() {
   function handleApply(e) {
     e.preventDefault()
     fetchAnalytics()
+  }
+
+  function handlePreset(days) {
+    const range = presetRange(days)
+    setDateRange(range)
+    fetchAnalytics(range)
   }
 
   function handleLogout() {
@@ -138,6 +164,13 @@ export default function AdminAnalytics() {
         <header style={styles.header}>
           <h1 style={styles.pageTitle}>Analytics</h1>
           <div style={styles.headerActions}>
+            <div style={styles.presetBtns}>
+              {[7, 30, 90].map(d => (
+                <button key={d} style={styles.presetBtn} onClick={() => handlePreset(d)}>
+                  {d}d
+                </button>
+              ))}
+            </div>
             <form onSubmit={handleApply} style={styles.dateForm}>
               <label style={styles.dateLabel}>From</label>
               <input
@@ -204,93 +237,81 @@ export default function AdminAnalytics() {
                 </div>
               </div>
 
-              {/* Processing volume table */}
+              {/* Volume chart */}
               <div style={styles.section}>
                 <h2 style={styles.sectionTitle}>Processing Volume</h2>
                 {volumeData.length === 0 ? (
                   <p style={styles.emptyText}>No data for this period.</p>
                 ) : (
-                  <div style={styles.tableWrapper}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>Date</th>
-                          <th style={styles.th}>Submitted</th>
-                          <th style={styles.th}>Approved</th>
-                          <th style={styles.th}>Rejected</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {volumeData.map(r => (
-                          <tr key={r.date} style={styles.row}>
-                            <td style={styles.tdMono}>{r.date}</td>
-                            <td style={styles.td}>{r.submitted}</td>
-                            <td style={{ ...styles.td, color: '#16a34a' }}>{r.approved}</td>
-                            <td style={{ ...styles.td, color: '#dc2626' }}>{r.rejected}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div style={styles.chartCard}>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <BarChart data={volumeData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Legend wrapperStyle={{ fontSize: '0.8rem' }} />
+                        <Bar dataKey="submitted" name="Submitted" fill="#60a5fa" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="approved" name="Approved" fill="#4ade80" radius={[3, 3, 0, 0]} />
+                        <Bar dataKey="rejected" name="Rejected" fill="#f87171" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                 )}
               </div>
 
-              {/* Approval time table */}
+              {/* Approval time chart */}
               <div style={styles.section}>
-                <h2 style={styles.sectionTitle}>Average Approval Time</h2>
+                <h2 style={styles.sectionTitle}>Average Approval Time (days)</h2>
                 {approvalData.length === 0 ? (
                   <p style={styles.emptyText}>No data for this period.</p>
                 ) : (
-                  <div style={styles.tableWrapper}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>Date</th>
-                          <th style={styles.th}>Avg Approval Time (days)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {approvalData.map(r => (
-                          <tr key={r.date} style={styles.row}>
-                            <td style={styles.tdMono}>{r.date}</td>
-                            <td style={styles.td}>
-                              {r.avgApprovalTimeMs != null
-                                ? (r.avgApprovalTimeMs / 86400000).toFixed(2)
-                                : '—'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div style={styles.chartCard}>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <LineChart data={approvalData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit=" d" />
+                        <Tooltip contentStyle={tooltipStyle} formatter={v => v != null ? `${v} days` : '—'} />
+                        <Line
+                          type="monotone"
+                          dataKey="avgDays"
+                          name="Avg Approval Time"
+                          stroke="#818cf8"
+                          strokeWidth={2}
+                          dot={false}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 )}
               </div>
 
-              {/* Rejection rate table */}
+              {/* Rejection rate chart */}
               <div style={styles.section}>
-                <h2 style={styles.sectionTitle}>Rejection Rate</h2>
+                <h2 style={styles.sectionTitle}>Rejection Rate (%)</h2>
                 {rejectionData.length === 0 ? (
                   <p style={styles.emptyText}>No data for this period.</p>
                 ) : (
-                  <div style={styles.tableWrapper}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>Date</th>
-                          <th style={styles.th}>Rejection Rate</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rejectionData.map(r => (
-                          <tr key={r.date} style={styles.row}>
-                            <td style={styles.tdMono}>{r.date}</td>
-                            <td style={{ ...styles.td, color: r.rejectionRate > 0.2 ? '#dc2626' : '#374151' }}>
-                              {r.rejectionRate != null ? `${(r.rejectionRate * 100).toFixed(1)}%` : '—'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div style={styles.chartCard}>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <LineChart data={rejectionData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit="%" domain={[0, 100]} />
+                        <Tooltip contentStyle={tooltipStyle} formatter={v => v != null ? `${v}%` : '—'} />
+                        <Line
+                          type="monotone"
+                          dataKey="ratePercent"
+                          name="Rejection Rate"
+                          stroke="#fb923c"
+                          strokeWidth={2}
+                          dot={false}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 )}
               </div>
@@ -300,6 +321,13 @@ export default function AdminAnalytics() {
       </main>
     </div>
   )
+}
+
+const tooltipStyle = {
+  fontSize: '0.8rem',
+  border: '1px solid #e5e7eb',
+  borderRadius: '6px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
 }
 
 const styles = {
@@ -356,6 +384,17 @@ const styles = {
   },
   pageTitle: { fontSize: '1.25rem', fontWeight: 600, color: '#111827' },
   headerActions: { display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' },
+  presetBtns: { display: 'flex', gap: '0.375rem' },
+  presetBtn: {
+    padding: '0.35rem 0.6rem',
+    background: '#f3f4f6',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    fontSize: '0.8rem',
+    fontWeight: 500,
+    color: '#374151',
+    cursor: 'pointer',
+  },
   dateForm: { display: 'flex', alignItems: 'center', gap: '0.5rem' },
   dateLabel: { fontSize: '0.875rem', color: '#6b7280' },
   dateInput: {
@@ -413,26 +452,10 @@ const styles = {
   section: { display: 'flex', flexDirection: 'column', gap: '0.75rem' },
   sectionTitle: { fontSize: '1rem', fontWeight: 600, color: '#111827' },
   emptyText: { color: '#6b7280', fontSize: '0.875rem' },
-  tableWrapper: {
+  chartCard: {
     background: '#fff',
     borderRadius: '10px',
     boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-    overflow: 'auto',
+    padding: '1.5rem 1rem 1rem',
   },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' },
-  th: {
-    padding: '0.75rem 1rem',
-    textAlign: 'left',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#6b7280',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    borderBottom: '1px solid #e5e7eb',
-    background: '#f9fafb',
-    whiteSpace: 'nowrap',
-  },
-  row: { borderBottom: '1px solid #f3f4f6' },
-  td: { padding: '0.75rem 1rem', color: '#111827', verticalAlign: 'middle' },
-  tdMono: { padding: '0.75rem 1rem', color: '#374151', verticalAlign: 'middle', fontFamily: 'monospace', fontSize: '0.8rem' },
 }
