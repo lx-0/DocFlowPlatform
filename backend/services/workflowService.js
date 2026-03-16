@@ -1,6 +1,7 @@
 'use strict';
 
 const prisma = require('../src/db/client');
+const { sendAssignmentEmail, sendStatusChangeEmail } = require('./notificationService');
 
 /**
  * Creates an ApprovalWorkflow and its step records for a document.
@@ -8,9 +9,10 @@ const prisma = require('../src/db/client');
  * @param {string} documentId
  * @param {string} queueName
  * @param {number} steps - number of approval steps
+ * @param {string|null} [approverEmail] - optional approver email for assignment notification
  * @returns {Promise<object>} created workflow with steps
  */
-async function createWorkflow(documentId, queueName, steps) {
+async function createWorkflow(documentId, queueName, steps, approverEmail) {
   const workflow = await prisma.approvalWorkflow.create({
     data: {
       documentId,
@@ -31,6 +33,19 @@ async function createWorkflow(documentId, queueName, steps) {
     where: { id: documentId },
     data: { routingStatus: 'in_approval' },
   });
+
+  if (approverEmail) {
+    try {
+      const doc = await prisma.document.findUnique({
+        where: { id: documentId },
+        include: { metadata: true },
+      });
+      const documentTitle = doc?.metadata?.title || doc?.originalFilename || documentId;
+      await sendAssignmentEmail(approverEmail, documentTitle, workflow.id);
+    } catch (err) {
+      console.error('[WorkflowService] Failed to send assignment notification:', err.message);
+    }
+  }
 
   return workflow;
 }
@@ -108,6 +123,23 @@ async function actOnStep(workflowId, stepNumber, userId, action, comment) {
     where: { id: workflow.documentId },
     data: { routingStatus: docRoutingStatus },
   });
+
+  // Send status change notification for terminal workflow states
+  const terminalStatuses = ['approved', 'rejected', 'changes_requested'];
+  if (terminalStatuses.includes(newStatus)) {
+    try {
+      const doc = await prisma.document.findUnique({
+        where: { id: workflow.documentId },
+        include: { metadata: true, uploadedBy: true },
+      });
+      if (doc?.uploadedBy?.email) {
+        const documentTitle = doc?.metadata?.title || doc?.originalFilename || workflow.documentId;
+        await sendStatusChangeEmail(doc.uploadedBy.email, documentTitle, newStatus, comment);
+      }
+    } catch (err) {
+      console.error('[WorkflowService] Failed to send status change notification:', err.message);
+    }
+  }
 
   return updatedWorkflow;
 }
