@@ -4,12 +4,14 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 const PDFDocument = require('pdfkit');
 const { authenticate } = require('../middleware/auth');
 const { requirePermission, invalidateRoleCache } = require('../middleware/rbac');
 const prisma = require('../src/db/client');
 const { logEvent } = require('../services/auditLog');
 const { getVolumeStats, getApprovalTimeStats, getRejectionRate, getBottleneckQueues, getBottleneckApprovers } = require('../services/analytics');
+const { encrypt, getSmtpConfig, getTemplate, readFileTemplate, EVENT_TYPES, DEFAULT_SUBJECTS } = require('../services/emailConfig');
 
 // All admin routes require authentication first
 
@@ -405,21 +407,28 @@ router.get('/analytics/export', authenticate, requirePermission('admin:users'), 
 
 // ─── System Settings (/api/admin/settings) ───────────────────────────────────
 
-const SETTINGS_KEYS = ['documentRetentionDays', 'auditLogRetentionDays'];
-const PURGE_STAT_KEYS = ['lastPurgeAt', 'lastPurgeDocumentsArchived', 'lastPurgeLogsDeleted'];
+function buildSettingsResponse(map) {
+  return {
+    documentRetentionDays: map.documentRetentionDays != null ? parseInt(map.documentRetentionDays, 10) : 365,
+    auditLogRetentionDays: map.auditLogRetentionDays != null ? parseInt(map.auditLogRetentionDays, 10) : 90,
+    lastPurgeAt: map.lastPurgeAt || null,
+    lastPurgeDocumentsArchived: map.lastPurgeDocumentsArchived != null ? parseInt(map.lastPurgeDocumentsArchived, 10) : null,
+    lastPurgeLogsDeleted: map.lastPurgeLogsDeleted != null ? parseInt(map.lastPurgeLogsDeleted, 10) : null,
+    // SMTP settings — smtpPass is masked; never returned in plaintext
+    smtpHost: map['smtp.host'] || '',
+    smtpPort: map['smtp.port'] ? parseInt(map['smtp.port'], 10) : null,
+    smtpUser: map['smtp.user'] || '',
+    smtpPass: map['smtp.pass'] ? '*****' : '',
+    smtpFromAddress: map['smtp.fromAddress'] || '',
+    smtpFromName: map['smtp.fromName'] || '',
+  };
+}
 
 router.get('/settings', authenticate, requirePermission('admin:users'), async (req, res) => {
   try {
     const rows = await prisma.systemConfig.findMany();
     const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-
-    res.json({
-      documentRetentionDays: map.documentRetentionDays != null ? parseInt(map.documentRetentionDays, 10) : 365,
-      auditLogRetentionDays: map.auditLogRetentionDays != null ? parseInt(map.auditLogRetentionDays, 10) : 90,
-      lastPurgeAt: map.lastPurgeAt || null,
-      lastPurgeDocumentsArchived: map.lastPurgeDocumentsArchived != null ? parseInt(map.lastPurgeDocumentsArchived, 10) : null,
-      lastPurgeLogsDeleted: map.lastPurgeLogsDeleted != null ? parseInt(map.lastPurgeLogsDeleted, 10) : null,
-    });
+    res.json(buildSettingsResponse(map));
   } catch (err) {
     console.error('[Admin] GET /settings error:', err);
     res.status(500).json({ error: 'Failed to fetch settings' });
@@ -427,8 +436,19 @@ router.get('/settings', authenticate, requirePermission('admin:users'), async (r
 });
 
 router.patch('/settings', authenticate, requirePermission('admin:users'), async (req, res) => {
-  const { documentRetentionDays, auditLogRetentionDays } = req.body;
+  const {
+    documentRetentionDays,
+    auditLogRetentionDays,
+    smtpHost,
+    smtpPort,
+    smtpUser,
+    smtpPass,
+    smtpFromAddress,
+    smtpFromName,
+  } = req.body;
+
   const updates = [];
+  const smtpChanged = [];
 
   if (documentRetentionDays !== undefined) {
     const val = parseInt(documentRetentionDays, 10);
@@ -446,6 +466,36 @@ router.patch('/settings', authenticate, requirePermission('admin:users'), async 
     updates.push({ key: 'auditLogRetentionDays', value: String(val) });
   }
 
+  if (smtpHost !== undefined) {
+    updates.push({ key: 'smtp.host', value: String(smtpHost) });
+    smtpChanged.push('smtpHost');
+  }
+  if (smtpPort !== undefined) {
+    const port = parseInt(smtpPort, 10);
+    if (isNaN(port) || port < 1 || port > 65535) {
+      return res.status(400).json({ error: 'smtpPort must be a valid port number (1–65535)' });
+    }
+    updates.push({ key: 'smtp.port', value: String(port) });
+    smtpChanged.push('smtpPort');
+  }
+  if (smtpUser !== undefined) {
+    updates.push({ key: 'smtp.user', value: String(smtpUser) });
+    smtpChanged.push('smtpUser');
+  }
+  // Only update smtpPass if a non-masked value is provided
+  if (smtpPass !== undefined && smtpPass !== '*****') {
+    updates.push({ key: 'smtp.pass', value: smtpPass ? encrypt(smtpPass) : '' });
+    smtpChanged.push('smtpPass');
+  }
+  if (smtpFromAddress !== undefined) {
+    updates.push({ key: 'smtp.fromAddress', value: String(smtpFromAddress) });
+    smtpChanged.push('smtpFromAddress');
+  }
+  if (smtpFromName !== undefined) {
+    updates.push({ key: 'smtp.fromName', value: String(smtpFromName) });
+    smtpChanged.push('smtpFromName');
+  }
+
   if (updates.length === 0) {
     return res.status(400).json({ error: 'No valid settings provided' });
   }
@@ -453,36 +503,132 @@ router.patch('/settings', authenticate, requirePermission('admin:users'), async 
   try {
     await Promise.all(
       updates.map(({ key, value }) =>
-        prisma.systemConfig.upsert({
-          where: { key },
-          update: { value },
-          create: { key, value },
-        })
+        prisma.systemConfig.upsert({ where: { key }, update: { value }, create: { key, value } })
       )
     );
 
+    const auditMeta = Object.fromEntries(
+      updates
+        .filter(({ key }) => key !== 'smtp.pass') // never log encrypted pass
+        .map(({ key, value }) => [key, value])
+    );
+    if (smtpChanged.length > 0) auditMeta['smtp_fields_changed'] = smtpChanged;
+
     logEvent({
       actorUserId: req.user.userId,
-      action: 'system.config_changed',
+      action: smtpChanged.length > 0 ? 'system.smtp_config_changed' : 'system.config_changed',
       targetType: 'system_config',
       targetId: 'settings',
-      metadata: Object.fromEntries(updates.map(({ key, value }) => [key, value])),
+      metadata: auditMeta,
       ipAddress: req.ip || null,
     });
 
-    // Return updated settings
     const rows = await prisma.systemConfig.findMany();
     const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-    res.json({
-      documentRetentionDays: map.documentRetentionDays != null ? parseInt(map.documentRetentionDays, 10) : 365,
-      auditLogRetentionDays: map.auditLogRetentionDays != null ? parseInt(map.auditLogRetentionDays, 10) : 90,
-      lastPurgeAt: map.lastPurgeAt || null,
-      lastPurgeDocumentsArchived: map.lastPurgeDocumentsArchived != null ? parseInt(map.lastPurgeDocumentsArchived, 10) : null,
-      lastPurgeLogsDeleted: map.lastPurgeLogsDeleted != null ? parseInt(map.lastPurgeLogsDeleted, 10) : null,
-    });
+    res.json(buildSettingsResponse(map));
   } catch (err) {
     console.error('[Admin] PATCH /settings error:', err);
     res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// ─── Test email (/api/admin/settings/test-email) ─────────────────────────────
+
+router.post('/settings/test-email', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { email: true },
+    });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const config = await getSmtpConfig();
+    if (!config.host || !config.user || !config.pass) {
+      return res.status(422).json({ error: 'SMTP is not configured. Please save SMTP settings first.' });
+    }
+
+    const fromStr = config.fromName
+      ? `"${config.fromName}" <${config.fromAddress}>`
+      : config.fromAddress;
+
+    const transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      auth: { user: config.user, pass: config.pass },
+    });
+
+    await transporter.sendMail({
+      from: fromStr,
+      to: user.email,
+      subject: 'DocFlow — SMTP Test Email',
+      text: 'This is a test email from DocFlow to verify your SMTP configuration is working correctly.',
+      html: `<p>This is a test email from <strong>DocFlow</strong> to verify your SMTP configuration is working correctly.</p>`,
+    });
+
+    res.json({ ok: true, sentTo: user.email });
+  } catch (err) {
+    console.error('[Admin] POST /settings/test-email error:', err);
+    res.status(500).json({ error: err.message || 'Failed to send test email' });
+  }
+});
+
+// ─── Notification templates (/api/admin/notification-templates) ───────────────
+
+router.get('/notification-templates', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const templates = await Promise.all(
+      EVENT_TYPES.map(async (eventType) => {
+        const { subject, body, isCustomized } = await getTemplate(eventType);
+        const fileHtml = body === null ? readFileTemplate(eventType).html : null;
+        return {
+          eventType,
+          subject,
+          body: body !== null ? body : fileHtml,
+          isCustomized,
+        };
+      })
+    );
+    res.json(templates);
+  } catch (err) {
+    console.error('[Admin] GET /notification-templates error:', err);
+    res.status(500).json({ error: 'Failed to fetch notification templates' });
+  }
+});
+
+router.patch('/notification-templates/:eventType', authenticate, requirePermission('admin:users'), async (req, res) => {
+  const { eventType } = req.params;
+  if (!EVENT_TYPES.includes(eventType)) {
+    return res.status(400).json({ error: `Invalid eventType. Must be one of: ${EVENT_TYPES.join(', ')}` });
+  }
+
+  const { subject, body } = req.body;
+  if (subject === undefined && body === undefined) {
+    return res.status(400).json({ error: 'At least one of subject or body is required' });
+  }
+
+  const updates = [];
+  if (subject !== undefined) updates.push({ key: `template.${eventType}.subject`, value: String(subject) });
+  if (body !== undefined) updates.push({ key: `template.${eventType}.body`, value: String(body) });
+
+  try {
+    await Promise.all(
+      updates.map(({ key, value }) =>
+        prisma.systemConfig.upsert({ where: { key }, update: { value }, create: { key, value } })
+      )
+    );
+
+    const { subject: updatedSubject, body: updatedBody } = await getTemplate(eventType);
+    const fileHtml = updatedBody === null ? readFileTemplate(eventType).html : null;
+
+    res.json({
+      eventType,
+      subject: updatedSubject,
+      body: updatedBody !== null ? updatedBody : fileHtml,
+      isCustomized: true,
+    });
+  } catch (err) {
+    console.error('[Admin] PATCH /notification-templates/:eventType error:', err);
+    res.status(500).json({ error: 'Failed to update notification template' });
   }
 });
 
