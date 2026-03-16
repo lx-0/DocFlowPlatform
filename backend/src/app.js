@@ -10,10 +10,12 @@ const approvalsRoutes = require('../routes/approvals');
 const adminRoutes = require('../routes/admin');
 const v1Routes = require('../routes/v1');
 const metricsAggregator = require('../jobs/metricsAggregator');
+const purgeJob = require('../jobs/purgeJob');
 
 const app = express();
 
 metricsAggregator.register();
+purgeJob.register();
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 app.use(helmet({

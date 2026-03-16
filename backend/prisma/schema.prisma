@@ -92,12 +92,22 @@ model Document {
   routingStatus        RoutingStatus     @default(unrouted)
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
+  deletedAt            DateTime?
   uploadedBy           User              @relation(fields: [uploadedByUserId], references: [id])
   metadata             DocumentMetadata?
   validationReport     ValidationReport?
   approvalWorkflow     ApprovalWorkflow?
 
   @@map("docflow_documents")
+}
+
+/// Key-value store for admin-configurable system settings.
+model SystemConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_config")
 }
 
 model RoutingRule {

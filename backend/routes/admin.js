@@ -384,4 +384,87 @@ router.get('/analytics/export', authenticate, requirePermission('admin:users'), 
   }
 });
 
+// ─── System Settings (/api/admin/settings) ───────────────────────────────────
+
+const SETTINGS_KEYS = ['documentRetentionDays', 'auditLogRetentionDays'];
+const PURGE_STAT_KEYS = ['lastPurgeAt', 'lastPurgeDocumentsArchived', 'lastPurgeLogsDeleted'];
+
+router.get('/settings', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const rows = await prisma.systemConfig.findMany();
+    const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+
+    res.json({
+      documentRetentionDays: map.documentRetentionDays != null ? parseInt(map.documentRetentionDays, 10) : 365,
+      auditLogRetentionDays: map.auditLogRetentionDays != null ? parseInt(map.auditLogRetentionDays, 10) : 90,
+      lastPurgeAt: map.lastPurgeAt || null,
+      lastPurgeDocumentsArchived: map.lastPurgeDocumentsArchived != null ? parseInt(map.lastPurgeDocumentsArchived, 10) : null,
+      lastPurgeLogsDeleted: map.lastPurgeLogsDeleted != null ? parseInt(map.lastPurgeLogsDeleted, 10) : null,
+    });
+  } catch (err) {
+    console.error('[Admin] GET /settings error:', err);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+router.patch('/settings', authenticate, requirePermission('admin:users'), async (req, res) => {
+  const { documentRetentionDays, auditLogRetentionDays } = req.body;
+  const updates = [];
+
+  if (documentRetentionDays !== undefined) {
+    const val = parseInt(documentRetentionDays, 10);
+    if (isNaN(val) || val < 0) {
+      return res.status(400).json({ error: 'documentRetentionDays must be a non-negative integer' });
+    }
+    updates.push({ key: 'documentRetentionDays', value: String(val) });
+  }
+
+  if (auditLogRetentionDays !== undefined) {
+    const val = parseInt(auditLogRetentionDays, 10);
+    if (isNaN(val) || val < 1) {
+      return res.status(400).json({ error: 'auditLogRetentionDays must be a positive integer' });
+    }
+    updates.push({ key: 'auditLogRetentionDays', value: String(val) });
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ error: 'No valid settings provided' });
+  }
+
+  try {
+    await Promise.all(
+      updates.map(({ key, value }) =>
+        prisma.systemConfig.upsert({
+          where: { key },
+          update: { value },
+          create: { key, value },
+        })
+      )
+    );
+
+    logEvent({
+      actorUserId: req.user.userId,
+      action: 'system.config_changed',
+      targetType: 'system_config',
+      targetId: 'settings',
+      metadata: Object.fromEntries(updates.map(({ key, value }) => [key, value])),
+      ipAddress: req.ip || null,
+    });
+
+    // Return updated settings
+    const rows = await prisma.systemConfig.findMany();
+    const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    res.json({
+      documentRetentionDays: map.documentRetentionDays != null ? parseInt(map.documentRetentionDays, 10) : 365,
+      auditLogRetentionDays: map.auditLogRetentionDays != null ? parseInt(map.auditLogRetentionDays, 10) : 90,
+      lastPurgeAt: map.lastPurgeAt || null,
+      lastPurgeDocumentsArchived: map.lastPurgeDocumentsArchived != null ? parseInt(map.lastPurgeDocumentsArchived, 10) : null,
+      lastPurgeLogsDeleted: map.lastPurgeLogsDeleted != null ? parseInt(map.lastPurgeLogsDeleted, 10) : null,
+    });
+  } catch (err) {
+    console.error('[Admin] PATCH /settings error:', err);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
 module.exports = router;

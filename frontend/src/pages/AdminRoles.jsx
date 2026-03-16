@@ -47,7 +47,7 @@ export default function AdminRoles() {
           <Link to="/documents" style={styles.navItem}>Documents</Link>
           <a href="#" style={styles.navItem}>Workflows</a>
           <Link to="/approvals" style={styles.navItem}>Approvals</Link>
-          <a href="#" style={styles.navItem}>Settings</a>
+          <Link to="/admin/settings" style={styles.navItem}>Settings</Link>
           {role === 'admin' && (
             <>
               <Link to="/admin/routing-rules" style={styles.navItem}>Routing Rules</Link>
