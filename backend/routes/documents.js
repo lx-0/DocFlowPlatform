@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
+const { requirePermission } = require('../middleware/rbac');
 const {
   uploadMiddleware,
   uploadDocument,
@@ -32,8 +33,8 @@ function handleUpload(req, res, next) {
   });
 }
 
-router.post('/upload', authenticate, handleUpload, uploadDocument);
-router.get('/', authenticate, listDocuments);
+router.post('/upload', authenticate, requirePermission('documents:write'), handleUpload, uploadDocument);
+router.get('/', authenticate, requirePermission('documents:read'), listDocuments);
 router.get('/:id', authenticate, getDocument);
 router.get('/:id/status', authenticate, getDocumentStatus);
 router.get('/:id/metadata', authenticate, getDocumentMetadata);

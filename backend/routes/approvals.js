@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
+const { requirePermission } = require('../middleware/rbac');
 const prisma = require('../src/db/client');
 const { actOnStep } = require('../services/workflowService');
 
@@ -68,7 +69,7 @@ router.get('/:workflowId', authenticate, async (req, res) => {
 
 // POST /api/approvals/:workflowId/act — submit approver decision
 // Body: { stepNumber, action, comment }
-router.post('/:workflowId/act', authenticate, async (req, res) => {
+router.post('/:workflowId/act', authenticate, requirePermission('documents:approve'), async (req, res) => {
   const { stepNumber, action, comment } = req.body;
   const validActions = ['approved', 'rejected', 'changes_requested'];
 
