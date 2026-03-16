@@ -1,0 +1,270 @@
+openapi: "3.1.0"
+info:
+  title: DocFlow Platform Public API
+  version: "1.0.0"
+  description: |
+    External integration API for the DocFlow Platform.
+    Allows ERP, HR, and content management systems to submit documents,
+    check status, and retrieve results.
+
+    ## Authentication
+    All `/api/v1/` endpoints require an API key issued by an admin.
+    Pass it in the `Authorization` header:
+    ```
+    Authorization: ApiKey dfk_<your-key>
+    ```
+    API keys are managed via the admin endpoints (`/api/admin/api-keys`).
+
+    ## Rate Limiting
+    100 requests per minute per API key. The response includes
+    `RateLimit-*` headers indicating current usage.
+
+servers:
+  - url: /api/v1
+    description: Public REST API v1
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "Format: `ApiKey dfk_<your-key>`"
+
+  schemas:
+    DocumentSubmitResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique document identifier
+        originalFilename:
+          type: string
+        mimeType:
+          type: string
+          enum: [application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document]
+        sizeBytes:
+          type: integer
+        status:
+          type: string
+          example: uploaded
+        submittedAt:
+          type: string
+          format: date-time
+
+    DocumentStatus:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        originalFilename:
+          type: string
+        mimeType:
+          type: string
+        sizeBytes:
+          type: integer
+        status:
+          type: string
+          description: Processing status (uploaded, processing, ready, error, etc.)
+        errorMessage:
+          type: string
+          nullable: true
+        routingStatus:
+          type: string
+          enum: [unrouted, queued, in_approval, approved, rejected]
+        routingQueueId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        metadata:
+          nullable: true
+          type: object
+          properties:
+            title:
+              type: string
+              nullable: true
+            author:
+              type: string
+              nullable: true
+            documentType:
+              type: string
+            pageCount:
+              type: integer
+              nullable: true
+            wordCount:
+              type: integer
+              nullable: true
+            extractedAt:
+              type: string
+              format: date-time
+        approvalWorkflow:
+          nullable: true
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            queueName:
+              type: string
+            currentStep:
+              type: integer
+            totalSteps:
+              type: integer
+            status:
+              type: string
+              enum: [pending, approved, rejected, changes_requested]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /documents:
+    post:
+      summary: Submit a document
+      description: |
+        Upload a PDF or DOCX file for processing. The document enters the
+        standard DocFlow pipeline (metadata extraction, validation, routing,
+        approval workflow). Poll `GET /api/v1/documents/{id}` for status.
+      operationId: submitDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF or DOCX file (max 50MB)
+      responses:
+        "201":
+          description: Document accepted and queued for processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentSubmitResponse"
+        "400":
+          description: Bad request (missing file, invalid type, file too large)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /documents/{id}:
+    get:
+      summary: Get document status and metadata
+      description: |
+        Returns current processing status, routing information, extracted
+        metadata, and approval workflow state for a document.
+      operationId: getDocument
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Document ID returned by the submit endpoint
+      responses:
+        "200":
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentStatus"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Document not found or not owned by API key owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /documents/{id}/download:
+    get:
+      summary: Download processed document
+      description: |
+        Downloads the most processed version of the document available:
+        final (cover sheet applied) > formatted > original upload.
+      operationId: downloadDocument
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Document binary
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Document or file not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

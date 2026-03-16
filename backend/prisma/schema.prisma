@@ -50,8 +50,23 @@ model User {
   roleRef      Role?      @relation(fields: [roleId], references: [id])
   createdAt    DateTime   @default(now())
   documents    Document[]
+  apiKeys      ApiKey[]
 
   @@map("users")
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     String
+  keyHash    String
+  label      String
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("api_keys")
 }
 
 enum RoutingStatus {

@@ -2,6 +2,8 @@
 
 const express = require('express');
 const router = express.Router();
+const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcryptjs');
 const { authenticate } = require('../middleware/auth');
 const { requirePermission, invalidateRoleCache } = require('../middleware/rbac');
 const prisma = require('../src/db/client');
@@ -135,6 +137,77 @@ router.get('/audit-logs', authenticate, requirePermission('admin:users'), async 
   } catch (err) {
     console.error('[Admin] GET /audit-logs error:', err);
     res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
+
+// ─── API Key Management (/api/admin/api-keys) ─────────────────────────────────
+
+// Generate a new API key — returns plaintext once, stores hash
+router.post('/api-keys', authenticate, requirePermission('admin:users'), async (req, res) => {
+  const { label } = req.body;
+  if (!label || !label.trim()) {
+    return res.status(400).json({ error: 'label is required' });
+  }
+
+  try {
+    const rawKey = `dfk_${uuidv4().replace(/-/g, '')}`;
+    const keyHash = await bcrypt.hash(rawKey, 12);
+
+    const apiKey = await prisma.apiKey.create({
+      data: {
+        id: uuidv4(),
+        userId: req.user.userId,
+        keyHash,
+        label: label.trim(),
+      },
+      select: { id: true, label: true, createdAt: true, userId: true },
+    });
+
+    try {
+      logEvent({ actorUserId: req.user.userId, action: 'apikey.created', targetType: 'api_key', targetId: apiKey.id, ipAddress: req.ip || null });
+    } catch {}
+
+    res.status(201).json({ ...apiKey, key: rawKey });
+  } catch (err) {
+    console.error('[Admin] POST /api-keys error:', err);
+    res.status(500).json({ error: 'Failed to create API key' });
+  }
+});
+
+// List all API keys — never returns plaintext key
+router.get('/api-keys', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const keys = await prisma.apiKey.findMany({
+      select: { id: true, label: true, userId: true, lastUsedAt: true, revokedAt: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(keys);
+  } catch (err) {
+    console.error('[Admin] GET /api-keys error:', err);
+    res.status(500).json({ error: 'Failed to list API keys' });
+  }
+});
+
+// Revoke an API key
+router.delete('/api-keys/:id', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const key = await prisma.apiKey.findUnique({ where: { id: req.params.id } });
+    if (!key) return res.status(404).json({ error: 'API key not found' });
+    if (key.revokedAt) return res.status(409).json({ error: 'API key already revoked' });
+
+    await prisma.apiKey.update({
+      where: { id: req.params.id },
+      data: { revokedAt: new Date() },
+    });
+
+    try {
+      logEvent({ actorUserId: req.user.userId, action: 'apikey.revoked', targetType: 'api_key', targetId: req.params.id, ipAddress: req.ip || null });
+    } catch {}
+
+    res.status(204).end();
+  } catch (err) {
+    console.error('[Admin] DELETE /api-keys/:id error:', err);
+    res.status(500).json({ error: 'Failed to revoke API key' });
   }
 });
 
