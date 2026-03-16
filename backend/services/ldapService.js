@@ -151,8 +151,8 @@ async function authenticate(email, password) {
   // 1. Bind with service account
   await bindAsync(serviceClient, process.env.LDAP_BIND_DN, process.env.LDAP_BIND_PASSWORD);
 
-  // 2. Search for user by email — escape special LDAP filter chars in the value
-  const safeEmail = email.replace(/[\\*()\x00/]/g, '');
+  // 2. Search for user by email — escape special LDAP filter chars per RFC 4515
+  const safeEmail = email.replace(/[\\*()\x00/<>+=,;'"]/g, (c) => `\\${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
   const filterTemplate = process.env.LDAP_USER_FILTER || '(mail={email})';
   const filter = filterTemplate.replace('{email}', safeEmail);
 

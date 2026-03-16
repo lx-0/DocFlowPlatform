@@ -87,7 +87,7 @@ function buildSamlStrategy() {
     issuer: process.env.SSO_ISSUER,
     cert: process.env.SSO_CERT,
     callbackUrl: process.env.SSO_CALLBACK_URL,
-    wantAssertionsSigned: false,
+    wantAssertionsSigned: true,
   };
 
   return new SamlStrategy(samlConfig, async (profile, done) => {

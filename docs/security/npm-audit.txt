@@ -1,0 +1,84 @@
+# npm audit report
+
+@hono/node-server  <1.19.10
+Severity: high
+@hono/node-server has authorization bypass for protected static paths via encoded slashes in Serve Static Middleware - https://github.com/advisories/GHSA-wc8c-qw6v-h7f6
+fix available via `npm audit fix --force`
+Will install prisma@6.19.2, which is a breaking change
+node_modules/@hono/node-server
+  @prisma/dev  *
+  Depends on vulnerable versions of @hono/node-server
+  Depends on vulnerable versions of @mrleebo/prisma-ast
+  Depends on vulnerable versions of hono
+  node_modules/@prisma/dev
+    prisma  >=6.20.0-dev.1
+    Depends on vulnerable versions of @prisma/dev
+    node_modules/prisma
+
+hono  <=4.12.6
+Severity: high
+Hono vulnerable to XSS through ErrorBoundary component  - https://github.com/advisories/GHSA-9r54-q6cx-xmh5
+Hono cache middleware ignores "Cache-Control: private" leading to Web Cache Deception - https://github.com/advisories/GHSA-6wqw-2p9w-4vw4
+Hono IPv4 address validation bypass in IP Restriction Middleware allows IP spoofing - https://github.com/advisories/GHSA-r354-f388-2fhh
+Hono has an Arbitrary Key Read in Serve static Middleware (Cloudflare Workers Adapter) - https://github.com/advisories/GHSA-w332-q679-j88p
+Hono added timing comparison hardening in basicAuth and bearerAuth - https://github.com/advisories/GHSA-gq3j-xvxp-8hrf
+Hono Vulnerable to Cookie Attribute Injection via Unsanitized domain and path in setCookie() - https://github.com/advisories/GHSA-5pq2-9x2x-5p6w
+Hono Vulnerable to SSE Control Field Injection via CR/LF in writeSSE() - https://github.com/advisories/GHSA-p6xx-57qc-3wxr
+Hono vulnerable to arbitrary file access via serveStatic vulnerability  - https://github.com/advisories/GHSA-q5qw-h33p-qvwr
+Hono vulnerable to Prototype Pollution possible through __proto__ key allowed in parseBody({ dot: true }) - https://github.com/advisories/GHSA-v8w9-8mx6-g223
+fix available via `npm audit fix`
+node_modules/hono
+
+lodash  4.0.0 - 4.17.21
+Severity: moderate
+Lodash has Prototype Pollution Vulnerability in `_.unset` and `_.omit` functions - https://github.com/advisories/GHSA-xxjr-mmjv-4gpg
+fix available via `npm audit fix --force`
+Will install prisma@6.19.2, which is a breaking change
+node_modules/lodash
+  @chevrotain/cst-dts-gen  10.0.0 - 10.5.0
+  Depends on vulnerable versions of @chevrotain/gast
+  Depends on vulnerable versions of lodash
+  node_modules/@chevrotain/cst-dts-gen
+  @chevrotain/gast  <=10.5.0
+  Depends on vulnerable versions of lodash
+  node_modules/@chevrotain/gast
+  chevrotain  10.0.0 - 10.5.0
+  Depends on vulnerable versions of @chevrotain/cst-dts-gen
+  Depends on vulnerable versions of @chevrotain/gast
+  Depends on vulnerable versions of lodash
+  node_modules/chevrotain
+    @mrleebo/prisma-ast  0.4.2 - 0.13.1
+    Depends on vulnerable versions of chevrotain
+    node_modules/@mrleebo/prisma-ast
+
+nodemailer  <=7.0.10
+Severity: high
+Nodemailer: Email to an unintended domain can occur due to Interpretation Conflict - https://github.com/advisories/GHSA-mm7p-fcc7-pg87
+Nodemailer’s addressparser is vulnerable to DoS caused by recursive calls - https://github.com/advisories/GHSA-rcmh-qjqh-p98v
+fix available via `npm audit fix --force`
+Will install nodemailer@8.0.2, which is a breaking change
+node_modules/nodemailer
+
+passport-saml  *
+Severity: critical
+Node-SAML SAML Signature Verification Vulnerability - https://github.com/advisories/GHSA-4mxg-3p6v-xgq3
+Depends on vulnerable versions of xml2js
+No fix available
+node_modules/passport-saml
+
+xml2js  <0.5.0
+Severity: moderate
+xml2js is vulnerable to prototype pollution - https://github.com/advisories/GHSA-776f-qx25-q3cc
+No fix available
+node_modules/xml2js
+
+12 vulnerabilities (6 moderate, 5 high, 1 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues possible (including breaking changes), run:
+  npm audit fix --force
+
+Some issues need review, and may require choosing
+a different dependency.

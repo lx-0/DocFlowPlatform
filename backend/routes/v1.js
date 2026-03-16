@@ -200,7 +200,9 @@ router.get('/documents/:id/download', async (req, res) => {
       return res.status(404).json({ error: 'File not found on storage.' });
     }
 
-    res.setHeader('Content-Disposition', `attachment; filename="${doc.originalFilename}"`);
+    // Sanitize filename to prevent header injection (strip CR/LF and quotes)
+    const safeFilename = doc.originalFilename.replace(/[\r\n"]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
     res.setHeader('Content-Type', doc.mimeType);
     return res.sendFile(filePath);
   } catch (err) {
