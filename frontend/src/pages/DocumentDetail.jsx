@@ -1,5 +1,6 @@
 import NotificationBell from '../components/NotificationBell'
-import { useState, useEffect } from 'react'
+import VersionDiffViewer from '../components/VersionDiffViewer'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 
 const ROUTING_STATUS_COLORS = {
@@ -41,6 +42,12 @@ export default function DocumentDetail() {
   const [doc, setDoc] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [versions, setVersions] = useState([])
+  const [versionsLoading, setVersionsLoading] = useState(false)
+  const [resubmitError, setResubmitError] = useState('')
+  const [resubmitSuccess, setResubmitSuccess] = useState('')
+  const [resubmitting, setResubmitting] = useState(false)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     if (!token) { navigate('/login'); return }
@@ -57,6 +64,44 @@ export default function DocumentDetail() {
       .catch(() => setError('Failed to load document.'))
       .finally(() => setLoading(false))
   }, [id, navigate, token])
+
+  useEffect(() => {
+    if (!token || !id) return
+    setVersionsLoading(true)
+    fetch(`/api/documents/${id}/versions`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setVersions(data.versions || []) })
+      .catch(() => {})
+      .finally(() => setVersionsLoading(false))
+  }, [id, token])
+
+  async function handleResubmit(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setResubmitError('')
+    setResubmitSuccess('')
+    setResubmitting(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const res = await fetch(`/api/documents/${id}/versions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Resubmit failed')
+      setVersions(prev => [data, ...prev])
+      setResubmitSuccess(`Version ${data.versionNumber} submitted successfully.`)
+    } catch (err) {
+      setResubmitError(err.message)
+    } finally {
+      setResubmitting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   function handleLogout() {
     localStorage.removeItem('token')
@@ -145,7 +190,9 @@ export default function DocumentDetail() {
                 <div style={styles.changesAlert}>
                   <div style={styles.changesTitle}>Changes Requested</div>
                   <p style={styles.changesBody}>{changesStep.comment || 'The approver has requested changes to this document.'}</p>
-                  <button disabled style={styles.resubmitBtn}>Re-submit (coming soon)</button>
+                  <p style={{ ...styles.changesBody, fontSize: '0.8rem', color: '#92400e' }}>
+                    Use the "Submit New Version" button in the Version History section below.
+                  </p>
                 </div>
               )}
 
@@ -156,6 +203,78 @@ export default function DocumentDetail() {
                   {finalStep.comment && <p style={styles.changesBody}>{finalStep.comment}</p>}
                 </div>
               )}
+
+              {/* Version History */}
+              <div style={styles.card}>
+                <h2 style={styles.cardTitle}>
+                  Version History
+                  {versions.length > 0 && (
+                    <span style={{ marginLeft: '0.75rem', fontWeight: 400, fontSize: '0.85rem', color: '#6b7280' }}>
+                      {versions.length} version{versions.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </h2>
+                {versionsLoading ? (
+                  <p style={styles.message}>Loading versions…</p>
+                ) : versions.length === 0 ? (
+                  <p style={styles.message}>No version history yet.</p>
+                ) : (
+                  <table style={styles.versionTable}>
+                    <thead>
+                      <tr>
+                        <th style={styles.th}>Version</th>
+                        <th style={styles.th}>Filename</th>
+                        <th style={styles.th}>Size</th>
+                        <th style={styles.th}>Submitted</th>
+                        <th style={styles.th}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {versions.map(v => (
+                        <tr key={v.id} style={styles.tr}>
+                          <td style={styles.td}>
+                            <span style={{ ...styles.chip, background: '#eff6ff', color: '#2563eb' }}>v{v.versionNumber}</span>
+                          </td>
+                          <td style={styles.td}>{v.originalFilename}</td>
+                          <td style={styles.td}>{(v.sizeBytes / 1024).toFixed(1)} KB</td>
+                          <td style={styles.td}>{new Date(v.createdAt).toLocaleString()}</td>
+                          <td style={styles.td}>
+                            <a
+                              href={`/api/documents/${id}/versions/${v.versionNumber}/download`}
+                              style={styles.downloadLink}
+                            >
+                              Download
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                <VersionDiffViewer
+                  documentId={id}
+                  versions={versions}
+                  token={token}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={resubmitting}
+                    style={{ ...styles.resubmitBtn, cursor: resubmitting ? 'not-allowed' : 'pointer', background: '#2563eb', color: '#fff', border: 'none' }}
+                  >
+                    {resubmitting ? 'Uploading…' : '+ Submit New Version'}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    style={{ display: 'none' }}
+                    onChange={handleResubmit}
+                  />
+                  {resubmitError && <span style={{ fontSize: '0.85rem', color: '#dc2626' }}>{resubmitError}</span>}
+                  {resubmitSuccess && <span style={{ fontSize: '0.85rem', color: '#16a34a' }}>{resubmitSuccess}</span>}
+                </div>
+              </div>
 
               {/* Approval Timeline */}
               {workflow && (
@@ -321,12 +440,41 @@ const styles = {
   resubmitBtn: {
     alignSelf: 'flex-start',
     padding: '0.5rem 1rem',
-    background: '#e5e7eb',
+    background: '#d97706',
     border: 'none',
     borderRadius: '6px',
-    color: '#9ca3af',
+    color: '#fff',
     fontSize: '0.875rem',
-    cursor: 'not-allowed',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  versionTable: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: '0.875rem',
+  },
+  th: {
+    textAlign: 'left',
+    padding: '0.5rem 0.75rem',
+    borderBottom: '2px solid #e5e7eb',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  tr: {
+    borderBottom: '1px solid #f3f4f6',
+  },
+  td: {
+    padding: '0.625rem 0.75rem',
+    color: '#374151',
+  },
+  downloadLink: {
+    color: '#2563eb',
+    textDecoration: 'none',
+    fontWeight: 500,
+    fontSize: '0.8rem',
   },
   rejectedAlert: {
     background: '#fef2f2',
