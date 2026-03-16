@@ -29,7 +29,11 @@ export default function Dashboard() {
           <Link to="/approvals" style={styles.navItem}>Approvals</Link>
           <a href="#" style={styles.navItem}>Settings</a>
           {role === 'admin' && (
-            <Link to="/admin/routing-rules" style={styles.navItem}>Routing Rules</Link>
+            <>
+              <Link to="/admin/routing-rules" style={styles.navItem}>Routing Rules</Link>
+              <Link to="/admin/users" style={styles.navItem}>Manage Users</Link>
+              <Link to="/admin/roles" style={styles.navItem}>Manage Roles</Link>
+            </>
           )}
         </nav>
         <button onClick={handleLogout} style={styles.logoutBtn}>Sign out</button>

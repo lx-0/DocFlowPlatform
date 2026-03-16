@@ -6,6 +6,8 @@ import DocumentDetail from './pages/DocumentDetail'
 import ApprovalQueue from './pages/ApprovalQueue'
 import ApprovalReview from './pages/ApprovalReview'
 import RoutingRulesAdmin from './pages/RoutingRulesAdmin'
+import AdminUsers from './pages/AdminUsers'
+import AdminRoles from './pages/AdminRoles'
 
 export default function App() {
   return (
@@ -18,6 +20,8 @@ export default function App() {
         <Route path="/approvals" element={<ApprovalQueue />} />
         <Route path="/approvals/:workflowId" element={<ApprovalReview />} />
         <Route path="/admin/routing-rules" element={<RoutingRulesAdmin />} />
+        <Route path="/admin/users" element={<AdminUsers />} />
+        <Route path="/admin/roles" element={<AdminRoles />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
