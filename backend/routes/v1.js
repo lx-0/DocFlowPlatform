@@ -16,6 +16,7 @@ const { authenticateApiKey } = require('../middleware/apiKeyAuth');
 const prisma = require('../src/db/client');
 const { runPipeline } = require('../services/pipelineService');
 const { logEvent } = require('../services/auditLog');
+const { deliverEvent } = require('../services/webhook');
 
 const router = express.Router();
 
@@ -114,6 +115,16 @@ router.post('/documents', handleUpload, async (req, res) => {
 
     // Kick off pipeline asynchronously
     runPipeline(doc.id).catch(() => {});
+
+    // Fire document.submitted webhook event asynchronously
+    deliverEvent(req.user.userId, 'document.submitted', {
+      id: doc.id,
+      originalFilename: doc.originalFilename,
+      mimeType: doc.mimeType,
+      sizeBytes: doc.sizeBytes,
+      status: doc.status,
+      submittedAt: doc.createdAt,
+    });
 
     return res.status(201).json({
       id: doc.id,

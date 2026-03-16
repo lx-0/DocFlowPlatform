@@ -1,11 +1,29 @@
 'use strict';
 
+/**
+ * Builds a document payload object matching the public API response shape.
+ * @param {object} doc - Prisma Document with optional metadata/uploadedBy
+ */
+function buildDocPayload(doc) {
+  return {
+    id: doc.id,
+    originalFilename: doc.originalFilename,
+    mimeType: doc.mimeType,
+    sizeBytes: doc.sizeBytes,
+    status: doc.status,
+    routingStatus: doc.routingStatus,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+  };
+}
+
 const prisma = require('../src/db/client');
 const {
   sendDocumentSubmitted,
   sendDocumentApproved,
   sendDocumentRejected,
 } = require('./email');
+const { deliverEvent } = require('./webhook');
 
 /**
  * Creates an ApprovalWorkflow and its step records for a document.
@@ -38,17 +56,22 @@ async function createWorkflow(documentId, queueName, steps, approverEmail) {
     data: { routingStatus: 'in_approval' },
   });
 
+  const doc = await prisma.document.findUnique({
+    where: { id: documentId },
+    include: { metadata: true },
+  });
+  const title = doc?.metadata?.title || doc?.originalFilename || documentId;
+
   if (approverEmail) {
     try {
-      const doc = await prisma.document.findUnique({
-        where: { id: documentId },
-        include: { metadata: true },
-      });
-      const title = doc?.metadata?.title || doc?.originalFilename || documentId;
       await sendDocumentSubmitted(approverEmail, { id: documentId, title });
     } catch (err) {
       console.error('[WorkflowService] Failed to send submission notification:', err.message);
     }
+  }
+
+  if (doc) {
+    deliverEvent(doc.uploadedByUserId, 'document.submitted', buildDocPayload(doc));
   }
 
   return workflow;
@@ -128,23 +151,27 @@ async function actOnStep(workflowId, stepNumber, userId, action, comment) {
     data: { routingStatus: docRoutingStatus },
   });
 
-  // Send lifecycle email for terminal workflow states
+  // Send lifecycle email and fire webhooks for terminal workflow states
   if (newStatus === 'approved' || newStatus === 'rejected') {
     try {
       const doc = await prisma.document.findUnique({
         where: { id: workflow.documentId },
         include: { metadata: true, uploadedBy: true },
       });
-      if (doc?.uploadedBy?.email) {
+      if (doc) {
         const docObj = {
           id: workflow.documentId,
           title: doc?.metadata?.title || doc?.originalFilename || workflow.documentId,
         };
-        if (newStatus === 'approved') {
-          await sendDocumentApproved(doc.uploadedBy.email, docObj);
-        } else {
-          await sendDocumentRejected(doc.uploadedBy.email, docObj, comment);
+        if (doc?.uploadedBy?.email) {
+          if (newStatus === 'approved') {
+            await sendDocumentApproved(doc.uploadedBy.email, docObj);
+          } else {
+            await sendDocumentRejected(doc.uploadedBy.email, docObj, comment);
+          }
         }
+        const webhookEvent = newStatus === 'approved' ? 'document.approved' : 'document.rejected';
+        deliverEvent(doc.uploadedByUserId, webhookEvent, buildDocPayload(doc));
       }
     } catch (err) {
       console.error('[WorkflowService] Failed to send lifecycle notification:', err.message);

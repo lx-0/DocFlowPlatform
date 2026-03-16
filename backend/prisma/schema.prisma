@@ -51,6 +51,7 @@ model User {
   createdAt    DateTime   @default(now())
   documents    Document[]
   apiKeys      ApiKey[]
+  webhooks     Webhook[]
 
   @@map("users")
 }
@@ -243,6 +244,39 @@ model ApproverMetric {
   @@unique([approverId, date])
   @@index([date])
   @@map("approver_metrics")
+}
+
+// ─── Webhook models ───────────────────────────────────────────────────────────
+
+/// User-registered webhook endpoints that receive document lifecycle events.
+model Webhook {
+  id         String            @id @default(uuid())
+  userId     String
+  url        String
+  events     String[]
+  secret     String
+  active     Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  user       User              @relation(fields: [userId], references: [id])
+  deliveries WebhookDelivery[]
+
+  @@index([userId])
+  @@map("webhooks")
+}
+
+/// Log of individual webhook delivery attempts.
+model WebhookDelivery {
+  id           String    @id @default(uuid())
+  webhookId    String
+  event        String
+  statusCode   Int?
+  attemptCount Int       @default(0)
+  deliveredAt  DateTime?
+  createdAt    DateTime  @default(now())
+  webhook      Webhook   @relation(fields: [webhookId], references: [id])
+
+  @@index([webhookId])
+  @@map("webhook_deliveries")
 }
 
 /// Daily rollup of routing queue throughput and wait times.

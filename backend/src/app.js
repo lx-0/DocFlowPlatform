@@ -9,6 +9,7 @@ const routingRulesRoutes = require('../routes/routingRules');
 const approvalsRoutes = require('../routes/approvals');
 const adminRoutes = require('../routes/admin');
 const v1Routes = require('../routes/v1');
+const webhookRoutes = require('../routes/webhooks');
 const metricsAggregator = require('../jobs/metricsAggregator');
 const purgeJob = require('../jobs/purgeJob');
 
@@ -61,5 +62,6 @@ app.use('/api/routing-rules', routingRulesRoutes);
 app.use('/api/approvals', approvalsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/v1', v1Routes);
+app.use('/api/webhooks', webhookRoutes);
 
 module.exports = app;
