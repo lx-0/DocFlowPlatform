@@ -103,6 +103,7 @@ docflow-platform/
 | [docs/admin/ldap.md](docs/admin/ldap.md) | LDAP/Active Directory integration guide |
 | [docs/admin/auth-modes.md](docs/admin/auth-modes.md) | Auth mode reference — `local`, `ldap`, and `sso` frontend modes |
 | [docs/admin/audit-logs.md](docs/admin/audit-logs.md) | Audit log admin guide — events captured, access, and compliance reporting |
+| [docs/admin/analytics-reporting.md](docs/admin/analytics-reporting.md) | Analytics & Reporting admin guide — dashboard, bottleneck detection, data export, and retention settings |
 
 ### User Guide
 
