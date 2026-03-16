@@ -44,7 +44,7 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/approvals/:workflowId — full workflow detail with steps
+// GET /api/approvals/:workflowId — full workflow detail with steps and current version
 router.get('/:workflowId', authenticate, async (req, res) => {
   try {
     const workflow = await prisma.approvalWorkflow.findUnique({
@@ -62,6 +62,11 @@ router.get('/:workflowId', authenticate, async (req, res) => {
     if (!workflow) {
       return res.status(404).json({ error: 'Workflow not found' });
     }
+    // Attach current version info so approvers know which version they're acting on
+    try {
+      const latestVersion = await getLatestVersion(workflow.documentId);
+      if (latestVersion) workflow.currentVersion = latestVersion;
+    } catch {}
     res.json(workflow);
   } catch (err) {
     console.error('[Approvals] GET /:workflowId error:', err);

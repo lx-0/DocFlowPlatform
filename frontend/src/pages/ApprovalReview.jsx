@@ -1,4 +1,5 @@
 import NotificationBell from '../components/NotificationBell'
+import VersionDiffViewer from '../components/VersionDiffViewer'
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 
@@ -11,6 +12,8 @@ export default function ApprovalReview() {
   const [comment, setComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [versions, setVersions] = useState([])
+  const [versionsLoading, setVersionsLoading] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -64,6 +67,20 @@ export default function ApprovalReview() {
     localStorage.removeItem('token')
     navigate('/login')
   }
+
+  useEffect(() => {
+    if (!workflow?.document?.id) return
+    const token = localStorage.getItem('token')
+    if (!token) return
+    setVersionsLoading(true)
+    fetch(`/api/documents/${workflow.document.id}/versions`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setVersions(data.versions || []) })
+      .catch(() => {})
+      .finally(() => setVersionsLoading(false))
+  }, [workflow])
 
   const doc = workflow?.document
   const meta = doc?.metadata
@@ -127,6 +144,12 @@ export default function ApprovalReview() {
                     <dt style={styles.dt}>Step</dt>
                     <dd style={styles.dd}>{workflow.currentStep} of {workflow.totalSteps}</dd>
                   </div>
+                  {workflow.currentVersion && (
+                    <div style={styles.dlRow}>
+                      <dt style={styles.dt}>Version</dt>
+                      <dd style={styles.dd}>v{workflow.currentVersion.versionNumber}</dd>
+                    </div>
+                  )}
                   {meta?.pageCount && (
                     <div style={styles.dlRow}>
                       <dt style={styles.dt}>Pages</dt>
@@ -152,6 +175,62 @@ export default function ApprovalReview() {
                   </a>
                 ) : null}
               </div>
+
+              {/* Version History */}
+              {versions.length > 0 && (
+                <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
+                  <h2 style={styles.cardTitle}>
+                    Version History
+                    <span style={{ marginLeft: '0.75rem', fontWeight: 400, fontSize: '0.85rem', color: '#6b7280' }}>
+                      {versions.length} version{versions.length !== 1 ? 's' : ''}
+                    </span>
+                  </h2>
+                  {versionsLoading ? (
+                    <p style={{ color: '#6b7280', fontSize: '0.9rem' }}>Loading versions…</p>
+                  ) : (
+                    <>
+                      <table style={styles.versionTable}>
+                        <thead>
+                          <tr>
+                            <th style={styles.th}>Version</th>
+                            <th style={styles.th}>Filename</th>
+                            <th style={styles.th}>Size</th>
+                            <th style={styles.th}>Submitted</th>
+                            <th style={styles.th}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {versions.map(v => (
+                            <tr key={v.id} style={styles.tr}>
+                              <td style={styles.td}>
+                                <span style={{ display: 'inline-block', padding: '0.2rem 0.6rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: 600, background: '#eff6ff', color: '#2563eb' }}>
+                                  v{v.versionNumber}
+                                </span>
+                              </td>
+                              <td style={styles.td}>{v.originalFilename}</td>
+                              <td style={styles.td}>{(v.sizeBytes / 1024).toFixed(1)} KB</td>
+                              <td style={styles.td}>{new Date(v.createdAt).toLocaleString()}</td>
+                              <td style={styles.td}>
+                                <a
+                                  href={`/api/documents/${doc.id}/versions/${v.versionNumber}/download`}
+                                  style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500, fontSize: '0.8rem' }}
+                                >
+                                  Download
+                                </a>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <VersionDiffViewer
+                        documentId={doc.id}
+                        versions={versions}
+                        token={localStorage.getItem('token')}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Action panel */}
               <div style={styles.card}>
@@ -397,5 +476,27 @@ const styles = {
   btnReject: {
     background: '#dc2626',
     color: '#fff',
+  },
+  versionTable: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    fontSize: '0.875rem',
+  },
+  th: {
+    textAlign: 'left',
+    padding: '0.5rem 0.75rem',
+    borderBottom: '2px solid #e5e7eb',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  tr: {
+    borderBottom: '1px solid #f3f4f6',
+  },
+  td: {
+    padding: '0.625rem 0.75rem',
+    color: '#374151',
   },
 }
