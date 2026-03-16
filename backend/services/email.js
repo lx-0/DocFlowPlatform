@@ -4,6 +4,7 @@ const nodemailer = require('nodemailer');
 const fs = require('fs');
 const path = require('path');
 const { getSmtpConfig, getTemplate, readFileTemplate } = require('./emailConfig');
+const { isEmailEnabled: isEmailPrefEnabled } = require('./notificationPreferences');
 
 const TEMPLATES_DIR = path.join(__dirname, '../templates/email');
 
@@ -90,8 +91,10 @@ async function dispatchEmail(eventType, vars, toAddress) {
  *
  * @param {string|string[]} approverEmails
  * @param {{ id: string, title?: string }} doc
+ * @param {string} [approverUserId] - optional, used to check notification preferences
  */
-function sendDocumentSubmitted(approverEmails, doc) {
+async function sendDocumentSubmitted(approverEmails, doc, approverUserId) {
+  if (approverUserId && !(await isEmailPrefEnabled(approverUserId, 'document.submitted'))) return;
   const to = Array.isArray(approverEmails) ? approverEmails.join(', ') : approverEmails;
   return dispatchEmail('submitted', { documentTitle: doc.title || doc.id, documentId: doc.id }, to);
 }
@@ -101,8 +104,10 @@ function sendDocumentSubmitted(approverEmails, doc) {
  *
  * @param {string} submitterEmail
  * @param {{ id: string, title?: string }} doc
+ * @param {string} [submitterUserId] - optional, used to check notification preferences
  */
-function sendDocumentApproved(submitterEmail, doc) {
+async function sendDocumentApproved(submitterEmail, doc, submitterUserId) {
+  if (submitterUserId && !(await isEmailPrefEnabled(submitterUserId, 'document.approved'))) return;
   return dispatchEmail('approved', { documentTitle: doc.title || doc.id, documentId: doc.id }, submitterEmail);
 }
 
@@ -112,8 +117,10 @@ function sendDocumentApproved(submitterEmail, doc) {
  * @param {string} submitterEmail
  * @param {{ id: string, title?: string }} doc
  * @param {string|null} reason
+ * @param {string} [submitterUserId] - optional, used to check notification preferences
  */
-function sendDocumentRejected(submitterEmail, doc, reason) {
+async function sendDocumentRejected(submitterEmail, doc, reason, submitterUserId) {
+  if (submitterUserId && !(await isEmailPrefEnabled(submitterUserId, 'document.rejected'))) return;
   const reasonRow = reason
     ? `<tr style="background: #f5f5f5;"><td style="padding: 8px; font-weight: bold;">Reason:</td><td style="padding: 8px;">${reason}</td></tr>`
     : '';
@@ -130,8 +137,10 @@ function sendDocumentRejected(submitterEmail, doc, reason) {
  *
  * @param {string} assigneeEmail
  * @param {{ id: string, title?: string }} doc
+ * @param {string} [assigneeUserId] - optional, used to check notification preferences
  */
-function sendDocumentAssigned(assigneeEmail, doc) {
+async function sendDocumentAssigned(assigneeEmail, doc, assigneeUserId) {
+  if (assigneeUserId && !(await isEmailPrefEnabled(assigneeUserId, 'document.assigned'))) return;
   return dispatchEmail('assigned', { documentTitle: doc.title || doc.id, documentId: doc.id }, assigneeEmail);
 }
 
@@ -140,8 +149,10 @@ function sendDocumentAssigned(assigneeEmail, doc) {
  *
  * @param {string} escalationEmail
  * @param {{ id: string, title?: string }} doc
+ * @param {string} [escalateeUserId] - optional, used to check notification preferences
  */
-function sendDocumentEscalated(escalationEmail, doc) {
+async function sendDocumentEscalated(escalationEmail, doc, escalateeUserId) {
+  if (escalateeUserId && !(await isEmailPrefEnabled(escalateeUserId, 'document.escalated'))) return;
   return dispatchEmail('escalated', { documentTitle: doc.title || doc.id, documentId: doc.id }, escalationEmail);
 }
 

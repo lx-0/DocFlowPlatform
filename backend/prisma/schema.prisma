@@ -42,19 +42,34 @@ model RolePermission {
 }
 
 model User {
-  id            String         @id @default(uuid())
-  email         String         @unique
-  passwordHash  String
-  role          String         @default("user")
-  roleId        String?
-  roleRef       Role?          @relation(fields: [roleId], references: [id])
-  createdAt     DateTime       @default(now())
-  documents     Document[]
-  apiKeys       ApiKey[]
-  webhooks      Webhook[]
-  notifications Notification[]
+  id                      String                   @id @default(uuid())
+  email                   String                   @unique
+  passwordHash            String
+  role                    String                   @default("user")
+  roleId                  String?
+  roleRef                 Role?                    @relation(fields: [roleId], references: [id])
+  createdAt               DateTime                 @default(now())
+  documents               Document[]
+  apiKeys                 ApiKey[]
+  webhooks                Webhook[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
 
   @@map("users")
+}
+
+/// Per-user opt-in/out preference for each notification event type.
+model NotificationPreference {
+  id           String  @id @default(uuid())
+  userId       String
+  eventType    String
+  emailEnabled Boolean @default(true)
+  inAppEnabled Boolean @default(true)
+  user         User    @relation(fields: [userId], references: [id])
+
+  @@unique([userId, eventType])
+  @@index([userId])
+  @@map("notification_preferences")
 }
 
 /// In-app notification for a user (document lifecycle alerts).

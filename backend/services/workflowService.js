@@ -68,16 +68,22 @@ async function createWorkflow(documentId, queueName, steps, approverEmail) {
   const title = doc?.metadata?.title || doc?.originalFilename || documentId;
 
   if (approverEmail) {
+    // Look up approver userId once — used for both email preference check and in-app notification
+    let approverUserId = null;
     try {
-      await sendDocumentSubmitted(approverEmail, { id: documentId, title });
+      const approver = await prisma.user.findUnique({ where: { email: approverEmail }, select: { id: true } });
+      approverUserId = approver?.id ?? null;
+    } catch (err) {
+      console.error('[WorkflowService] Failed to look up approver:', err.message);
+    }
+    try {
+      await sendDocumentSubmitted(approverEmail, { id: documentId, title }, approverUserId);
     } catch (err) {
       console.error('[WorkflowService] Failed to send submission notification:', err.message);
     }
-    // In-app notification: look up approver by email
     try {
-      const approver = await prisma.user.findUnique({ where: { email: approverEmail }, select: { id: true } });
-      if (approver) {
-        await notifySubmitted(approver.id, { id: documentId, title });
+      if (approverUserId) {
+        await notifySubmitted(approverUserId, { id: documentId, title });
       }
     } catch (err) {
       console.error('[WorkflowService] Failed to create in-app submission notification:', err.message);
@@ -179,9 +185,9 @@ async function actOnStep(workflowId, stepNumber, userId, action, comment) {
         };
         if (doc?.uploadedBy?.email) {
           if (newStatus === 'approved') {
-            await sendDocumentApproved(doc.uploadedBy.email, docObj);
+            await sendDocumentApproved(doc.uploadedBy.email, docObj, doc.uploadedByUserId);
           } else {
-            await sendDocumentRejected(doc.uploadedBy.email, docObj, comment);
+            await sendDocumentRejected(doc.uploadedBy.email, docObj, comment, doc.uploadedByUserId);
           }
         }
         // In-app notifications for terminal states

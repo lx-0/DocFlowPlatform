@@ -11,6 +11,7 @@ import AdminRoles from './pages/AdminRoles'
 import AdminAuditLogs from './pages/AdminAuditLogs'
 import AdminAnalytics from './pages/AdminAnalytics'
 import AdminSettings from './pages/AdminSettings'
+import NotificationSettings from './pages/NotificationSettings'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/documents/:id" element={<DocumentDetail />} />
         <Route path="/approvals" element={<ApprovalQueue />} />
         <Route path="/approvals/:workflowId" element={<ApprovalReview />} />
+        <Route path="/settings/notifications" element={<NotificationSettings />} />
         <Route path="/admin/routing-rules" element={<RoutingRulesAdmin />} />
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="/admin/roles" element={<AdminRoles />} />

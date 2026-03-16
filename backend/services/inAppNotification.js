@@ -5,6 +5,7 @@
  *
  * Creates Notification records for document lifecycle events so users can see
  * pending actions and recent activity without relying on email.
+ * Respects per-user notification preferences before creating records.
  *
  * Usage:
  *   const { notifySubmitted, notifyApproved, ... } = require('./inAppNotification');
@@ -12,6 +13,7 @@
  */
 
 const prisma = require('../src/db/client');
+const { isInAppEnabled } = require('./notificationPreferences');
 
 /**
  * Core helper — insert a single notification row.
@@ -38,6 +40,7 @@ async function createNotification(userId, type, title, body, linkUrl = null) {
  * @param {{ id: string, title: string }} doc
  */
 async function notifySubmitted(approverUserId, doc) {
+  if (!(await isInAppEnabled(approverUserId, 'document.submitted'))) return;
   await createNotification(
     approverUserId,
     'document.submitted',
@@ -53,6 +56,7 @@ async function notifySubmitted(approverUserId, doc) {
  * @param {{ id: string, title: string }} doc
  */
 async function notifyApproved(ownerUserId, doc) {
+  if (!(await isInAppEnabled(ownerUserId, 'document.approved'))) return;
   await createNotification(
     ownerUserId,
     'document.approved',
@@ -69,6 +73,7 @@ async function notifyApproved(ownerUserId, doc) {
  * @param {string|null} [reason]
  */
 async function notifyRejected(ownerUserId, doc, reason) {
+  if (!(await isInAppEnabled(ownerUserId, 'document.rejected'))) return;
   const bodyExtra = reason ? ` Reason: ${reason}` : '';
   await createNotification(
     ownerUserId,
@@ -85,6 +90,7 @@ async function notifyRejected(ownerUserId, doc, reason) {
  * @param {{ id: string, title: string }} doc
  */
 async function notifyAssigned(assigneeUserId, doc) {
+  if (!(await isInAppEnabled(assigneeUserId, 'document.assigned'))) return;
   await createNotification(
     assigneeUserId,
     'document.assigned',
@@ -100,6 +106,7 @@ async function notifyAssigned(assigneeUserId, doc) {
  * @param {{ id: string, title: string }} doc
  */
 async function notifyEscalated(escalateeUserId, doc) {
+  if (!(await isInAppEnabled(escalateeUserId, 'document.escalated'))) return;
   await createNotification(
     escalateeUserId,
     'document.escalated',

@@ -8,11 +8,14 @@
  * GET    /api/notifications/unread-count — { count } for badge display
  * PATCH  /api/notifications/:id/read    — mark single notification read
  * POST   /api/notifications/read-all    — mark all notifications read
+ * GET    /api/notifications/preferences — get user notification preferences
+ * PATCH  /api/notifications/preferences — bulk update notification preferences
  */
 
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const prisma = require('../src/db/client');
+const { getUserPreferences, updateUserPreferences } = require('../services/notificationPreferences');
 
 const router = express.Router();
 router.use(authenticate);
@@ -47,6 +50,42 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('[Notifications] GET / error:', err);
     return res.status(500).json({ error: 'Failed to list notifications.' });
+  }
+});
+
+// ─── GET /api/notifications/preferences ──────────────────────────────────────
+router.get('/preferences', async (req, res) => {
+  try {
+    const prefs = await getUserPreferences(req.user.userId);
+    return res.json(prefs);
+  } catch (err) {
+    console.error('[Notifications] GET /preferences error:', err);
+    return res.status(500).json({ error: 'Failed to get notification preferences.' });
+  }
+});
+
+// ─── PATCH /api/notifications/preferences ────────────────────────────────────
+router.patch('/preferences', async (req, res) => {
+  const updates = req.body;
+  if (!Array.isArray(updates)) {
+    return res.status(400).json({ error: 'Expected an array of preference updates.' });
+  }
+  const valid = updates.every(
+    u =>
+      typeof u.eventType === 'string' &&
+      typeof u.emailEnabled === 'boolean' &&
+      typeof u.inAppEnabled === 'boolean',
+  );
+  if (!valid) {
+    return res.status(400).json({ error: 'Each entry must have eventType (string), emailEnabled (boolean), inAppEnabled (boolean).' });
+  }
+  try {
+    await updateUserPreferences(req.user.userId, req.user.role, updates);
+    const prefs = await getUserPreferences(req.user.userId);
+    return res.json(prefs);
+  } catch (err) {
+    console.error('[Notifications] PATCH /preferences error:', err);
+    return res.status(500).json({ error: 'Failed to update notification preferences.' });
   }
 });
 
