@@ -17,6 +17,10 @@ const {
   downloadFinalDocument,
   getDocumentStatus,
   reprocessDocument,
+  listDocumentVersions,
+  downloadDocumentVersion,
+  resubmitDocument,
+  diffDocumentVersions,
 } = require('../controllers/documentController');
 
 // Wrap multer errors into proper HTTP responses
@@ -46,5 +50,18 @@ router.get('/:id/validation-report', authenticate, getValidationReport);
 router.post('/:id/cover-sheet', authenticate, applyCoverSheet);
 router.get('/:id/final/download', authenticate, downloadFinalDocument);
 router.post('/:id/reprocess', authenticate, reprocessDocument);
+
+// ─── Version history ───────────────────────────────────────────────────────────
+// GET  /:id/versions              — list all versions (submitter, approver, admin)
+// POST /:id/versions              — upload a new version / resubmit (submitter only)
+// GET  /:id/versions/diff         — diff two DOCX versions ?from=<n>&to=<m>
+// GET  /:id/versions/:v/download  — download a specific version
+
+// Note: diff and download must be registered before /:id/versions/:v/download
+// so that the literal "diff" segment doesn't get caught as a version number.
+router.get('/:id/versions/diff', authenticate, diffDocumentVersions);
+router.get('/:id/versions', authenticate, listDocumentVersions);
+router.post('/:id/versions', authenticate, requirePermission('documents:write'), handleUpload, resubmitDocument);
+router.get('/:id/versions/:versionNumber/download', authenticate, downloadDocumentVersion);
 
 module.exports = router;

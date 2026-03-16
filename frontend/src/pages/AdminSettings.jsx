@@ -65,6 +65,13 @@ export default function AdminSettings() {
   const [testEmailMsg, setTestEmailMsg] = useState('')
   const [testEmailError, setTestEmailError] = useState('')
 
+  // ─── Bulk approval settings ───────────────────────────────────────────────
+  const [bulkExcludedTypes, setBulkExcludedTypes] = useState([])
+  const [newExcludedType, setNewExcludedType] = useState('')
+  const [bulkSaving, setBulkSaving] = useState(false)
+  const [bulkMsg, setBulkMsg] = useState('')
+  const [bulkError, setBulkError] = useState('')
+
   // ─── Notification templates ───────────────────────────────────────────────
   const [templates, setTemplates] = useState([])
   const [templatesLoading, setTemplatesLoading] = useState(false)
@@ -96,6 +103,7 @@ export default function AdminSettings() {
       setSettings(data)
       setDocDays(String(data.documentRetentionDays))
       setAuditDays(String(data.auditLogRetentionDays))
+      setBulkExcludedTypes(data.bulkApprovalExcludedTypes || [])
       setSmtpHost(data.smtpHost || '')
       setSmtpPort(data.smtpPort != null ? String(data.smtpPort) : '')
       setSmtpUser(data.smtpUser || '')
@@ -219,6 +227,37 @@ export default function AdminSettings() {
     finally { setTemplateSaving(false) }
   }
 
+  async function handleSaveBulkApprovals(e) {
+    e.preventDefault()
+    const t = localStorage.getItem('token')
+    setBulkSaving(true); setBulkMsg(''); setBulkError('')
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
+        body: JSON.stringify({ bulkApprovalExcludedTypes: bulkExcludedTypes }),
+      })
+      if (res.status === 401) { navigate('/login'); return }
+      if (!res.ok) { const b = await res.json().catch(() => ({})); setBulkError(b.error || 'Failed to save.'); return }
+      const data = await res.json()
+      setBulkExcludedTypes(data.bulkApprovalExcludedTypes || [])
+      setBulkMsg('Settings saved.')
+      setTimeout(() => setBulkMsg(''), 3000)
+    } catch { setBulkError('Failed to save bulk approval settings.') }
+    finally { setBulkSaving(false) }
+  }
+
+  function addExcludedType() {
+    const trimmed = newExcludedType.trim()
+    if (!trimmed || bulkExcludedTypes.includes(trimmed)) return
+    setBulkExcludedTypes(prev => [...prev, trimmed])
+    setNewExcludedType('')
+  }
+
+  function removeExcludedType(type) {
+    setBulkExcludedTypes(prev => prev.filter(t => t !== type))
+  }
+
   function handleLogout() {
     localStorage.removeItem('token')
     navigate('/login')
@@ -233,6 +272,7 @@ export default function AdminSettings() {
     { id: 'retention', label: 'Retention' },
     { id: 'email', label: 'Email' },
     { id: 'templates', label: 'Notification Templates' },
+    { id: 'bulk', label: 'Bulk Approvals' },
   ]
 
   return (
@@ -417,6 +457,62 @@ export default function AdminSettings() {
                     {testEmailMsg && <span style={styles.saveMsg}>{testEmailMsg}</span>}
                   </div>
                   {testEmailError && <div style={{ ...styles.errorBanner, marginTop: '0.75rem' }}>{testEmailError}</div>}
+                </form>
+              </section>
+            )}
+
+            {/* ── Bulk Approvals Tab ── */}
+            {activeTab === 'bulk' && (
+              <section style={styles.card}>
+                <h2 style={styles.sectionTitle}>Bulk Approval Settings</h2>
+                <p style={styles.sectionDesc}>
+                  Configure which document types cannot be processed via bulk approval actions.
+                  Documents of these types will be skipped during bulk operations and must be reviewed individually.
+                </p>
+                {bulkError && <div style={styles.errorBanner}>{bulkError}</div>}
+                <form onSubmit={handleSaveBulkApprovals}>
+                  <div style={styles.fieldGroup}>
+                    <label style={styles.label}>Excluded Document Types</label>
+                    <p style={styles.fieldHint}>
+                      Document types listed here are not eligible for bulk approve or reject. Leave empty to allow all types.
+                    </p>
+                    {bulkExcludedTypes.length === 0 && (
+                      <p style={{ fontSize: '0.85rem', color: '#6b7280', fontStyle: 'italic' }}>No types excluded — all document types are eligible for bulk approval.</p>
+                    )}
+                    {bulkExcludedTypes.length > 0 && (
+                      <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 0.75rem' }}>
+                        {bulkExcludedTypes.map(type => (
+                          <li key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0', borderBottom: '1px solid #f3f4f6' }}>
+                            <span style={{ flex: 1, fontSize: '0.9rem', fontFamily: 'monospace' }}>{type}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeExcludedType(type)}
+                              style={{ padding: '0.2rem 0.6rem', background: 'transparent', border: '1px solid #fca5a5', borderRadius: 4, color: '#dc2626', cursor: 'pointer', fontSize: '0.75rem' }}
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                      <input
+                        type="text"
+                        placeholder="e.g. HighValueContract"
+                        value={newExcludedType}
+                        onChange={e => setNewExcludedType(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExcludedType() } }}
+                        style={{ ...styles.inputFull, flex: 1 }}
+                      />
+                      <button type="button" onClick={addExcludedType} style={styles.secondaryBtn}>Add</button>
+                    </div>
+                  </div>
+                  <div style={styles.saveRow}>
+                    <button type="submit" disabled={bulkSaving} style={styles.saveBtn}>
+                      {bulkSaving ? 'Saving…' : 'Save Settings'}
+                    </button>
+                    {bulkMsg && <span style={styles.saveMsg}>{bulkMsg}</span>}
+                  </div>
                 </form>
               </section>
             )}
