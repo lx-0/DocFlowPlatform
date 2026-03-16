@@ -149,6 +149,7 @@ model RoutingRule {
   name          String
   documentType  String?
   departmentTag String?
+  conditions    Json?
   priority      Int
   targetQueue   String
   isActive      Boolean  @default(true)

@@ -183,4 +183,190 @@ describe('RoutingEngine', () => {
       assert.equal(result.routingStatus, 'queued');
     });
   });
+
+  describe('condition groups (AND/OR)', () => {
+    it('AND group: routes when all conditions match', async () => {
+      mockRules.push({
+        id: 'r1',
+        documentType: null,
+        departmentTag: null,
+        conditions: {
+          operator: 'AND',
+          conditions: [
+            { field: 'documentType', op: 'eq', value: 'PDF' },
+            { field: 'department', op: 'eq', value: 'legal' },
+          ],
+        },
+        priority: 1,
+        targetQueue: 'legal-pdf-queue',
+        isActive: true,
+      });
+
+      const result = await routeDocument('doc-20', { documentType: 'PDF', department: 'legal' });
+
+      assert.equal(result.routingQueueId, 'legal-pdf-queue');
+      assert.equal(result.routingStatus, 'queued');
+    });
+
+    it('AND group: does not route when one condition fails', async () => {
+      mockRules.push({
+        id: 'r1',
+        documentType: null,
+        departmentTag: null,
+        conditions: {
+          operator: 'AND',
+          conditions: [
+            { field: 'documentType', op: 'eq', value: 'PDF' },
+            { field: 'department', op: 'eq', value: 'legal' },
+          ],
+        },
+        priority: 1,
+        targetQueue: 'legal-pdf-queue',
+        isActive: true,
+      });
+
+      const result = await routeDocument('doc-21', { documentType: 'PDF', department: 'finance' });
+
+      assert.equal(result.routingStatus, 'unrouted');
+    });
+
+    it('OR group: routes when any condition matches', async () => {
+      mockRules.push({
+        id: 'r1',
+        documentType: null,
+        departmentTag: null,
+        conditions: {
+          operator: 'OR',
+          conditions: [
+            { field: 'documentType', op: 'eq', value: 'PDF' },
+            { field: 'department', op: 'eq', value: 'legal' },
+          ],
+        },
+        priority: 1,
+        targetQueue: 'mixed-queue',
+        isActive: true,
+      });
+
+      const result = await routeDocument('doc-22', { documentType: 'DOCX', department: 'legal' });
+
+      assert.equal(result.routingQueueId, 'mixed-queue');
+      assert.equal(result.routingStatus, 'queued');
+    });
+
+    it('OR group: does not route when no conditions match', async () => {
+      mockRules.push({
+        id: 'r1',
+        documentType: null,
+        departmentTag: null,
+        conditions: {
+          operator: 'OR',
+          conditions: [
+            { field: 'documentType', op: 'eq', value: 'PDF' },
+            { field: 'department', op: 'eq', value: 'legal' },
+          ],
+        },
+        priority: 1,
+        targetQueue: 'mixed-queue',
+        isActive: true,
+      });
+
+      const result = await routeDocument('doc-23', { documentType: 'DOCX', department: 'finance' });
+
+      assert.equal(result.routingStatus, 'unrouted');
+    });
+
+    it('multi-condition route: type=PDF AND department=legal AND amount>5000', async () => {
+      mockRules.push({
+        id: 'r1',
+        documentType: null,
+        departmentTag: null,
+        conditions: {
+          operator: 'AND',
+          conditions: [
+            { field: 'documentType', op: 'eq', value: 'PDF' },
+            { field: 'department', op: 'eq', value: 'legal' },
+            { field: 'amount', op: 'gt', value: 5000 },
+          ],
+        },
+        priority: 1,
+        targetQueue: 'high-value-legal-queue',
+        isActive: true,
+      });
+
+      // Matches: PDF + legal + amount 12000 > 5000
+      const hit = await routeDocument('doc-24', { documentType: 'PDF', department: 'legal', amount: 12000 });
+      assert.equal(hit.routingQueueId, 'high-value-legal-queue');
+      assert.equal(hit.routingStatus, 'queued');
+
+      // Does not match: amount too low
+      const miss = await routeDocument('doc-25', { documentType: 'PDF', department: 'legal', amount: 100 });
+      assert.equal(miss.routingStatus, 'unrouted');
+    });
+
+    it('custom metadata key-value condition', async () => {
+      mockRules.push({
+        id: 'r1',
+        documentType: null,
+        departmentTag: null,
+        conditions: {
+          operator: 'AND',
+          conditions: [
+            { field: 'custom.invoiceType', op: 'eq', value: 'purchase_order' },
+          ],
+        },
+        priority: 1,
+        targetQueue: 'po-queue',
+        isActive: true,
+      });
+
+      const hit = await routeDocument('doc-26', {
+        documentType: 'PDF',
+        customFields: { invoiceType: 'purchase_order' },
+      });
+      assert.equal(hit.routingQueueId, 'po-queue');
+
+      const miss = await routeDocument('doc-27', {
+        documentType: 'PDF',
+        customFields: { invoiceType: 'invoice' },
+      });
+      assert.equal(miss.routingStatus, 'unrouted');
+    });
+
+    it('conditions rule takes precedence over legacy fields when conditions is present', async () => {
+      // Rule has both legacy documentType field AND a conditions block — conditions wins
+      mockRules.push({
+        id: 'r1',
+        documentType: 'DOCX', // legacy field says DOCX
+        departmentTag: null,
+        conditions: {
+          operator: 'AND',
+          conditions: [
+            { field: 'documentType', op: 'eq', value: 'PDF' }, // conditions say PDF
+          ],
+        },
+        priority: 1,
+        targetQueue: 'conditions-queue',
+        isActive: true,
+      });
+
+      // PDF matches via conditions, even though legacy documentType on rule is DOCX
+      const result = await routeDocument('doc-28', { documentType: 'PDF' });
+      assert.equal(result.routingQueueId, 'conditions-queue');
+    });
+
+    it('empty conditions group matches unconditionally', async () => {
+      mockRules.push({
+        id: 'r1',
+        documentType: null,
+        departmentTag: null,
+        conditions: { operator: 'AND', conditions: [] },
+        priority: 1,
+        targetQueue: 'catch-all',
+        isActive: true,
+      });
+
+      const result = await routeDocument('doc-29', { documentType: 'XLSX', department: 'hr' });
+      assert.equal(result.routingQueueId, 'catch-all');
+    });
+  });
 });
