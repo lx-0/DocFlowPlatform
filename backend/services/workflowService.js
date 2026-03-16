@@ -22,13 +22,17 @@ const {
   sendDocumentSubmitted,
   sendDocumentApproved,
   sendDocumentRejected,
+  sendDocumentAssigned,
 } = require('./email');
 const { deliverEvent } = require('./webhook');
 const {
   notifySubmitted,
   notifyApproved,
   notifyRejected,
+  notifyAssigned,
 } = require('./inAppNotification');
+const { getActiveDelegationForApprover } = require('./delegationService');
+const { logEvent } = require('./auditLog');
 
 /**
  * Creates an ApprovalWorkflow and its step records for a document.
@@ -69,7 +73,7 @@ async function createWorkflow(documentId, queueName, steps, approverEmail) {
   const title = doc?.metadata?.title || doc?.originalFilename || documentId;
 
   if (approverEmail) {
-    // Look up approver userId once — used for both email preference check and in-app notification
+    // Look up approver userId once — used for delegation check, email preference, and in-app notification
     let approverUserId = null;
     try {
       const approver = await prisma.user.findUnique({ where: { email: approverEmail }, select: { id: true } });
@@ -77,6 +81,49 @@ async function createWorkflow(documentId, queueName, steps, approverEmail) {
     } catch (err) {
       console.error('[WorkflowService] Failed to look up approver:', err.message);
     }
+
+    // Check if the approver has an active delegation — if so, reassign the first step to the delegate
+    if (approverUserId) {
+      try {
+        const delegation = await getActiveDelegationForApprover(approverUserId);
+        if (delegation) {
+          const firstStep = workflow.steps.find(s => s.stepNumber === 1);
+          if (firstStep) {
+            await prisma.approvalStep.update({
+              where: { id: firstStep.id },
+              data: { assignedToUserId: delegation.delegateId },
+            });
+            logEvent({
+              actorUserId: null,
+              action: 'document.delegated',
+              targetType: 'approval_workflow',
+              targetId: workflow.id,
+              metadata: {
+                documentId,
+                stepNumber: 1,
+                delegationId: delegation.id,
+                originalApproverId: approverUserId,
+                delegateId: delegation.delegateId,
+              },
+            });
+            // Notify the delegate
+            try {
+              await sendDocumentAssigned(delegation.delegate.email, { id: documentId, title }, delegation.delegateId);
+            } catch (err) {
+              console.error('[WorkflowService] Failed to email delegate:', err.message);
+            }
+            try {
+              await notifyAssigned(delegation.delegateId, { id: documentId, title });
+            } catch (err) {
+              console.error('[WorkflowService] Failed to in-app notify delegate:', err.message);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[WorkflowService] Failed to check/apply delegation:', err.message);
+      }
+    }
+
     try {
       await sendDocumentSubmitted(approverEmail, { id: documentId, title }, approverUserId);
     } catch (err) {
@@ -132,6 +179,22 @@ async function actOnStep(workflowId, stepNumber, userId, action, comment) {
   const step = workflow.steps.find(s => s.stepNumber === stepNumber);
   if (!step) {
     throw Object.assign(new Error('Step not found'), { code: 'NOT_FOUND' });
+  }
+
+  // Check if the acting user is a delegate acting on behalf of someone else
+  // (the step was assigned to someone who has delegated their authority to userId)
+  let delegationId = null;
+  let originalApproverId = null;
+  if (step.assignedToUserId && step.assignedToUserId !== userId) {
+    try {
+      const delegation = await getActiveDelegationForApprover(step.assignedToUserId);
+      if (delegation && delegation.delegateId === userId) {
+        delegationId = delegation.id;
+        originalApproverId = step.assignedToUserId;
+      }
+    } catch (err) {
+      console.error('[WorkflowService] Failed to check delegation for actOnStep:', err.message);
+    }
   }
 
   // Record the action on the step
@@ -210,6 +273,11 @@ async function actOnStep(workflowId, stepNumber, userId, action, comment) {
     } catch (err) {
       console.error('[WorkflowService] Failed to send lifecycle notification:', err.message);
     }
+  }
+
+  // Attach delegation context for callers (e.g. route-level audit log)
+  if (delegationId) {
+    updatedWorkflow._delegationContext = { delegationId, originalApproverId };
   }
 
   return updatedWorkflow;

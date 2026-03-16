@@ -405,6 +405,59 @@ router.get('/analytics/export', authenticate, requirePermission('admin:users'), 
   }
 });
 
+// ─── Delegation management (/api/admin/delegations) ──────────────────────────
+
+// GET /api/admin/delegations — list all delegations (admin only)
+// Query params: active=true limits to currently active delegations
+router.get('/delegations', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const now = new Date();
+    const { active } = req.query;
+    const where = {};
+    if (active === 'true') {
+      where.revokedAt = null;
+      where.startDate = { lte: now };
+      where.endDate = { gte: now };
+    }
+    const delegations = await prisma.approvalDelegation.findMany({
+      where,
+      include: {
+        delegator: { select: { id: true, email: true } },
+        delegate: { select: { id: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(delegations);
+  } catch (err) {
+    console.error('[Admin] GET /delegations error:', err);
+    res.status(500).json({ error: 'Failed to list delegations' });
+  }
+});
+
+// DELETE /api/admin/delegations/:id — admin revoke any delegation
+router.delete('/delegations/:id', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const { revokeDelegation } = require('../services/delegationService');
+    const revoked = await revokeDelegation(req.params.id, req.user.id);
+    try {
+      logEvent({
+        actorUserId: req.user.id,
+        action: 'delegation.revoked',
+        targetType: 'approval_delegation',
+        targetId: req.params.id,
+        metadata: { delegatorId: revoked.delegatorId, delegateId: revoked.delegateId, revokedByAdmin: true },
+        ipAddress: req.ip || null,
+      });
+    } catch {}
+    res.json(revoked);
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message });
+    if (err.code === 'ALREADY_REVOKED') return res.status(409).json({ error: err.message });
+    console.error('[Admin] DELETE /delegations/:id error:', err);
+    res.status(500).json({ error: 'Failed to revoke delegation' });
+  }
+});
+
 // ─── Escalations dashboard (/api/admin/escalations) ──────────────────────────
 
 // GET /api/admin/escalations — list currently escalated approval steps

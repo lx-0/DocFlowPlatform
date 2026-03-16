@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [M6] — Notifications & Integrations — 2026-03-16 _(draft — finalise once DOCA-58 and DOCA-59 land)_
+## [M6] — Notifications & Integrations — 2026-03-16
 
 Full release notes: [docs/releases/m6-notifications-integrations.md](docs/releases/m6-notifications-integrations.md)
 
@@ -15,14 +15,24 @@ Full release notes: [docs/releases/m6-notifications-integrations.md](docs/releas
 - **Email notifications** — transactional emails for all document lifecycle events (`document.submitted`, `document.approved`, `document.rejected`, `document.assigned`, `document.escalated`). Async delivery via configurable SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`). HTML + plain-text templates in `src/templates/email/`. `EMAIL_ENABLED=false` logs to console in dev.
 - **Webhook event delivery** — external systems can subscribe to document lifecycle events via registered webhooks. HMAC-signed payloads (`X-DocFlow-Signature`), up-to-3 retry with exponential back-off, full delivery log. API: `POST /api/webhooks`, `GET /api/webhooks`, `DELETE /api/webhooks/:id`, `GET /api/webhooks/:id/deliveries`.
 - **In-app notification center** — per-user notification inbox in the top nav. Unread badge, dropdown panel, "Mark all read" button, 60-second polling. Notifications purged after 30 days. API: `GET /api/notifications`, `PATCH /api/notifications/:id/read`, `POST /api/notifications/read-all`, `GET /api/notifications/unread-count`.
-- **User notification preferences** _(DOCA-58, in progress)_ — per-event opt-in/out controls for email and in-app channels. Settings page at `/settings/notifications`. Dispatch services check preferences before sending.
-- **Admin SMTP configuration & template management** _(DOCA-59, in progress)_ — admin UI "Email" tab at `/admin/settings` for SMTP credentials (AES-256 encrypted at rest) with test-send button. Template editor for per-event subject and body with live preview. Audit log entry on config changes.
+- **User notification preferences** — per-event opt-in/out controls for email and in-app channels. Settings page at `/settings/notifications`. Dispatch services check preferences before sending. Admins always receive `document.escalated` regardless of preference.
+- **Admin SMTP configuration & template management** — admin UI "Email" tab at `/admin/settings` for SMTP credentials (AES-256 encrypted at rest) with test-send button. Template editor for per-event subject and body with live preview. Audit log entry on config changes (`system.smtp_config_changed`).
 
 ### Known Limitations
 
 - In-app notifications use 60-second polling; WebSocket/SSE real-time push is planned for M7.
 - Notification center is not mobile-optimised in this release.
 - Webhook delivery requires HTTPS URLs in production.
+
+---
+
+## [M7-partial] — Advanced Approval Workflow — 2026-03-16
+
+### Added
+
+- **Approval delegation** — approvers going on leave can temporarily delegate their authority to another user with Approver or Admin role. Delegations have mandatory start and end dates; during an active delegation, incoming documents are automatically re-routed to the delegate. The approval queue also surfaces delegated items. Admins can view and revoke any active delegation. Circular delegation chains are rejected. Audit trail records `delegation.created`, `delegation.revoked`, and `document.delegated` events.
+  - API: `POST /api/delegations`, `GET /api/delegations`, `DELETE /api/delegations/:id`
+  - Admin API: `GET /api/admin/delegations`, `DELETE /api/admin/delegations/:id`
 
 ---
 

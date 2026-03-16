@@ -9,19 +9,37 @@ const { actOnStep } = require('../services/workflowService');
 const { logEvent } = require('../services/auditLog');
 
 // GET /api/approvals — list workflows where any step is assigned to current user,
-// or (if no steps assigned) all pending workflows visible to the user's queue access.
+// unassigned steps, or steps delegated to the current user.
 router.get('/', authenticate, async (req, res) => {
   try {
     const userId = req.user.id;
+    const now = new Date();
+
+    // Find users who have delegated their authority to the current user (active delegations)
+    const activeDelegationsToMe = await prisma.approvalDelegation.findMany({
+      where: {
+        delegateId: userId,
+        revokedAt: null,
+        startDate: { lte: now },
+        endDate: { gte: now },
+      },
+      select: { delegatorId: true },
+    });
+    const delegatorIds = activeDelegationsToMe.map(d => d.delegatorId);
+
+    // Build assignedToUserId filter: own id, null, or any active delegator
+    const assignedToConditions = [
+      { assignedToUserId: userId },
+      { assignedToUserId: null },
+      ...delegatorIds.map(id => ({ assignedToUserId: id })),
+    ];
+
     const workflows = await prisma.approvalWorkflow.findMany({
       where: {
         status: 'pending',
         steps: {
           some: {
-            OR: [
-              { assignedToUserId: userId },
-              { assignedToUserId: null },
-            ],
+            OR: assignedToConditions,
           },
         },
       },
@@ -30,7 +48,7 @@ router.get('/', authenticate, async (req, res) => {
         document: {
           include: {
             metadata: true,
-            uploadedBy: { select: { id: true, name: true, email: true } },
+            uploadedBy: { select: { id: true, email: true } },
           },
         },
       },
@@ -88,7 +106,12 @@ router.post('/:workflowId/act', authenticate, requirePermission('documents:appro
     );
     try {
       const auditAction = `document.${action}`; // document.approved | document.rejected | document.changes_requested
-      logEvent({ actorUserId: req.user.userId || null, action: auditAction, targetType: 'approval_workflow', targetId: req.params.workflowId, metadata: { stepNumber, comment: comment ?? null, documentId: workflow.documentId }, ipAddress: req.ip || null });
+      const auditMeta = { stepNumber, comment: comment ?? null, documentId: workflow.documentId };
+      if (workflow._delegationContext) {
+        auditMeta.delegationId = workflow._delegationContext.delegationId;
+        auditMeta.actedOnBehalfOf = workflow._delegationContext.originalApproverId;
+      }
+      logEvent({ actorUserId: req.user.id || req.user.userId || null, action: auditAction, targetType: 'approval_workflow', targetId: req.params.workflowId, metadata: auditMeta, ipAddress: req.ip || null });
     } catch {}
     res.json(workflow);
   } catch (err) {

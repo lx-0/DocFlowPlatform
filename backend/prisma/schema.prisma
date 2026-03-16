@@ -54,8 +54,28 @@ model User {
   webhooks                Webhook[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
+  delegationsOut          ApprovalDelegation[]     @relation("DelegationsDelegated")
+  delegationsIn           ApprovalDelegation[]     @relation("DelegationsReceived")
 
   @@map("users")
+}
+
+/// Temporary authority transfer from one approver to another during absence.
+model ApprovalDelegation {
+  id          String    @id @default(uuid())
+  delegatorId String
+  delegateId  String
+  startDate   DateTime
+  endDate     DateTime
+  revokedAt   DateTime?
+  revokedById String?
+  createdAt   DateTime  @default(now())
+  delegator   User      @relation("DelegationsDelegated", fields: [delegatorId], references: [id])
+  delegate    User      @relation("DelegationsReceived", fields: [delegateId], references: [id])
+
+  @@index([delegatorId])
+  @@index([delegateId])
+  @@map("approval_delegations")
 }
 
 /// Per-user opt-in/out preference for each notification event type.
