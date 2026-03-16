@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 
+function getUserRole(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1])).role
+  } catch {
+    return null
+  }
+}
+
 const STATUS_COLORS = {
   pending: { background: '#fef9c3', color: '#854d0e' },
   approved: { background: '#dcfce7', color: '#166534' },
@@ -21,6 +29,8 @@ export default function ApprovalQueue() {
   const [workflows, setWorkflows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const token = localStorage.getItem('token')
+  const role = token ? getUserRole(token) : null
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -55,6 +65,9 @@ export default function ApprovalQueue() {
           <Link to="/dashboard" style={styles.navItem}>Workflows</Link>
           <Link to="/approvals" style={{ ...styles.navItem, ...styles.navItemActive }}>Approvals</Link>
           <Link to="/dashboard" style={styles.navItem}>Settings</Link>
+          {role === 'admin' && (
+            <Link to="/admin/routing-rules" style={styles.navItem}>Routing Rules</Link>
+          )}
         </nav>
         <button onClick={handleLogout} style={styles.logoutBtn}>Sign out</button>
       </aside>

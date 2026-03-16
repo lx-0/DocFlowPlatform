@@ -1,7 +1,17 @@
 import { useNavigate, Link } from 'react-router-dom'
 
+function getUserRole(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1])).role
+  } catch {
+    return null
+  }
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
+  const token = localStorage.getItem('token')
+  const role = token ? getUserRole(token) : null
 
   function handleLogout() {
     localStorage.removeItem('token')
@@ -18,6 +28,9 @@ export default function Dashboard() {
           <a href="#" style={styles.navItem}>Workflows</a>
           <Link to="/approvals" style={styles.navItem}>Approvals</Link>
           <a href="#" style={styles.navItem}>Settings</a>
+          {role === 'admin' && (
+            <Link to="/admin/routing-rules" style={styles.navItem}>Routing Rules</Link>
+          )}
         </nav>
         <button onClick={handleLogout} style={styles.logoutBtn}>Sign out</button>
       </aside>
