@@ -19,7 +19,7 @@ DocFlow Platform ensures consistent formatting conventions (including proper cov
 - **Backend**: Node.js / Express
 - **Database**: PostgreSQL with Prisma ORM
 - **Frontend**: React
-- **Authentication**: JWT-based (email + password; SSO in M4)
+- **Authentication**: JWT-based (local email/password, LDAP/Active Directory, SAML 2.0/OIDC SSO)
 - **CI**: GitHub Actions
 
 ## Getting Started
@@ -80,6 +80,29 @@ docflow-platform/
 | [docs/architecture.md](docs/architecture.md) | System design, component relationships, and data flow |
 | [docs/api-reference.md](docs/api-reference.md) | Full REST API reference |
 | [docs/contributing.md](docs/contributing.md) | Contribution guide and PR workflow |
+| [docs/admin/rbac.md](docs/admin/rbac.md) | RBAC admin guide — managing users, roles, and permissions |
+| [docs/admin/sso.md](docs/admin/sso.md) | SSO setup guide — SAML 2.0 and OIDC configuration |
+| [docs/admin/ldap.md](docs/admin/ldap.md) | LDAP/Active Directory integration guide |
+| [docs/admin/auth-modes.md](docs/admin/auth-modes.md) | Auth mode reference — `local`, `ldap`, and `sso` frontend modes |
+| [docs/dev/rbac.md](docs/dev/rbac.md) | RBAC developer reference — middleware usage and permission model |
+| [docs/admin/audit-logs.md](docs/admin/audit-logs.md) | Audit log admin guide — events captured, access, and compliance reporting |
+| [docs/api/rest-api.md](docs/api/rest-api.md) | Public REST API reference — external integration endpoints (`/api/v1/`) |
+| [docs/api/api-key-management.md](docs/api/api-key-management.md) | API key management — generating, listing, and revoking keys |
+
+## API Integration
+
+External systems can submit documents, poll status, and download results using the public REST API secured by API keys.
+
+| Resource | Description |
+|:---------|:------------|
+| [docs/api/rest-api.md](docs/api/rest-api.md) | Endpoint reference, request/response examples, rate limiting, error codes, and end-to-end integration walkthrough |
+| [docs/api/api-key-management.md](docs/api/api-key-management.md) | How admins generate, list, and revoke API keys; security best practices |
+
+**Quick start:**
+
+1. An admin generates an API key at `/admin/api-keys`.
+2. Include the key as `Authorization: ApiKey <key>` on all requests.
+3. `POST /api/v1/documents` to submit a file, poll `GET /api/v1/documents/:id` for status, then `GET /api/v1/documents/:id/download` once complete.
 
 ## Contributing
 
