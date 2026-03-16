@@ -75,20 +75,40 @@ docflow-platform/
 
 ## Documentation
 
+### Developer
+
 | Document | Description |
 |:---------|:------------|
-| [docs/user-guide/README.md](docs/user-guide/README.md) | End-user guide — submitter, approver, and admin guides |
-| [docs/architecture.md](docs/architecture.md) | System design, component relationships, and data flow |
+| [docs/dev/getting-started.md](docs/dev/getting-started.md) | Local setup, prerequisites, env vars, running tests, and CI checks |
+| [docs/dev/architecture.md](docs/dev/architecture.md) | System diagram, key directories, data flow, and auth layers |
+| [docs/dev/contributing.md](docs/dev/contributing.md) | Branch workflow, commit style, adding routes and pages |
+| [docs/dev/rbac.md](docs/dev/rbac.md) | RBAC developer reference — middleware usage and permission model |
+
+### API
+
+| Document | Description |
+|:---------|:------------|
 | [docs/api-reference.md](docs/api-reference.md) | Full REST API reference |
-| [docs/contributing.md](docs/contributing.md) | Contribution guide and PR workflow |
+| [docs/api/rest-api.md](docs/api/rest-api.md) | Public REST API reference — external integration endpoints (`/api/v1/`) |
+| [docs/api/api-key-management.md](docs/api/api-key-management.md) | API key management — generating, listing, and revoking keys |
+
+### Admin
+
+| Document | Description |
+|:---------|:------------|
 | [docs/admin/rbac.md](docs/admin/rbac.md) | RBAC admin guide — managing users, roles, and permissions |
 | [docs/admin/sso.md](docs/admin/sso.md) | SSO setup guide — SAML 2.0 and OIDC configuration |
 | [docs/admin/ldap.md](docs/admin/ldap.md) | LDAP/Active Directory integration guide |
 | [docs/admin/auth-modes.md](docs/admin/auth-modes.md) | Auth mode reference — `local`, `ldap`, and `sso` frontend modes |
-| [docs/dev/rbac.md](docs/dev/rbac.md) | RBAC developer reference — middleware usage and permission model |
 | [docs/admin/audit-logs.md](docs/admin/audit-logs.md) | Audit log admin guide — events captured, access, and compliance reporting |
-| [docs/api/rest-api.md](docs/api/rest-api.md) | Public REST API reference — external integration endpoints (`/api/v1/`) |
-| [docs/api/api-key-management.md](docs/api/api-key-management.md) | API key management — generating, listing, and revoking keys |
+
+### User Guide
+
+| Document | Description |
+|:---------|:------------|
+| [docs/user-guide/README.md](docs/user-guide/README.md) | End-user guide — submitter, approver, and admin guides |
+| [docs/architecture.md](docs/architecture.md) | System design, component relationships, and data flow |
+| [docs/contributing.md](docs/contributing.md) | Contribution guide and PR workflow |
 
 ## API Integration
 
