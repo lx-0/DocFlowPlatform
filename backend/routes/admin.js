@@ -5,6 +5,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { requirePermission, invalidateRoleCache } = require('../middleware/rbac');
 const prisma = require('../src/db/client');
+const { logEvent } = require('../services/auditLog');
 
 // All admin routes require authentication first
 
@@ -35,6 +36,9 @@ router.patch('/users/:id/role', authenticate, requirePermission('admin:users'), 
       select: { id: true, email: true, role: true, roleId: true },
     });
     invalidateRoleCache(roleId);
+    try {
+      logEvent({ actorUserId: req.user.userId, action: 'user.role_changed', targetType: 'user', targetId: req.params.id, metadata: { newRoleId: roleId }, ipAddress: req.ip || null });
+    } catch {}
     res.json(user);
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'User not found' });
@@ -95,6 +99,42 @@ router.patch('/roles/:id', authenticate, requirePermission('admin:roles'), async
     if (err.code === 'P2025') return res.status(404).json({ error: 'Role not found' });
     console.error('[Admin] PATCH /roles/:id error:', err);
     res.status(500).json({ error: 'Failed to update role' });
+  }
+});
+
+// ─── Audit Logs (/api/admin/audit-logs) ──────────────────────────────────────
+
+router.get('/audit-logs', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const { actorUserId, action, from, to, page = '1', limit = '50' } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const skip = (pageNum - 1) * limitNum;
+
+    const where = {};
+    if (actorUserId) where.actorUserId = actorUserId;
+    if (action) where.action = action;
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from);
+      if (to) where.createdAt.lte = new Date(to);
+    }
+
+    const [logs, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limitNum,
+      }),
+      prisma.auditLog.count({ where }),
+    ]);
+
+    res.json({ logs, total, page: pageNum, limit: limitNum });
+  } catch (err) {
+    console.error('[Admin] GET /audit-logs error:', err);
+    res.status(500).json({ error: 'Failed to fetch audit logs' });
   }
 });
 

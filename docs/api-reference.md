@@ -116,6 +116,66 @@ The `middleware/auth.js` middleware verifies the token and attaches the decoded 
 
 ---
 
+## Admin — Audit Logs
+
+### `GET /api/admin/audit-logs`
+
+Returns a paginated list of audit log entries. Requires the `admin:audit` permission (the built-in `admin` role includes this).
+
+See the full parameter and response documentation in the [Audit Log Admin Guide](admin/audit-logs.md#api-reference).
+
+**Query parameters (summary)**
+
+| Parameter | Type | Description |
+|:----------|:-----|:------------|
+| `action` | string | Filter by event type (e.g. `user.login`, `document.approved`) |
+| `actorId` | UUID | Filter by actor user ID |
+| `actorEmail` | string | Filter by actor email |
+| `resourceId` | UUID | Filter by affected resource ID |
+| `from` | ISO 8601 | Earliest event timestamp (inclusive) |
+| `to` | ISO 8601 | Latest event timestamp (inclusive) |
+| `page` | integer | Page number, 1-indexed (default: `1`) |
+| `pageSize` | integer | Results per page, max 200 (default: `50`) |
+
+**Example request**
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:3000/api/admin/audit-logs?action=document.approved&from=2026-03-01"
+```
+
+**Response `200 OK`**
+
+```json
+{
+  "total": 42,
+  "page": 1,
+  "pageSize": 50,
+  "entries": [
+    {
+      "id": "a1b2c3d4-...",
+      "action": "document.approved",
+      "actorId": "e5f6a7b8-...",
+      "actorEmail": "carol@example.com",
+      "resourceType": "document",
+      "resourceId": "09ab1cd2-...",
+      "metadata": { "documentTitle": "Q1 Expense Report", "workflowStep": 2 },
+      "createdAt": "2026-03-15T14:32:01.000Z"
+    }
+  ]
+}
+```
+
+**Error responses**
+
+| Status | Condition |
+|:-------|:----------|
+| `401 Unauthorized` | Missing or invalid JWT |
+| `403 Forbidden` | Lacks `admin:audit` permission |
+| `400 Bad Request` | Invalid query parameter |
+
+---
+
 ## Environment Variables (Backend)
 
 | Variable | Default | Description |

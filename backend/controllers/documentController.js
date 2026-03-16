@@ -7,6 +7,7 @@ const { formatDocument } = require('../services/docxFormatter');
 const { validateDocument: runValidation } = require('../services/formatValidator');
 const { generateCoverSheet } = require('../services/coverSheetGenerator');
 const { runPipeline } = require('../services/pipelineService');
+const { logEvent } = require('../services/auditLog');
 
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
 const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -186,6 +187,10 @@ async function getDocument(req, res) {
   if (!doc) {
     return res.status(404).json({ error: 'Document not found.' });
   }
+
+  try {
+    logEvent({ actorUserId: req.user.userId || null, action: 'document.viewed', targetType: 'document', targetId: doc.id, ipAddress: req.ip || null });
+  } catch {}
 
   return res.json(doc);
 }

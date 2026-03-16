@@ -2,6 +2,7 @@
 
 const { randomBytes } = require('crypto');
 const ssoService = require('../services/ssoService');
+const { logEvent } = require('../services/auditLog');
 
 // ---------------------------------------------------------------------------
 // GET /api/auth/sso/login
@@ -52,6 +53,9 @@ async function callback(req, res, next) {
       if (!user) return res.status(401).json({ error: 'SAML authentication failed' });
 
       const token = ssoService.issueJwt(user);
+      try {
+        logEvent({ actorUserId: user.id, action: 'user.login', targetType: 'user', targetId: user.id, metadata: { method: 'saml' }, ipAddress: req.ip || null });
+      } catch {}
       return res.status(200).json({ token });
     })(req, res, next);
   }
@@ -63,6 +67,9 @@ async function callback(req, res, next) {
       const user = await ssoService.handleOidcCallback(params, state);
       const token = ssoService.issueJwt(user);
       res.clearCookie('oidc_state');
+      try {
+        logEvent({ actorUserId: user.id, action: 'user.login', targetType: 'user', targetId: user.id, metadata: { method: 'oidc' }, ipAddress: req.ip || null });
+      } catch {}
       return res.status(200).json({ token });
     } catch (err) {
       return next(err);

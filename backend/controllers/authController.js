@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../src/db/client');
+const { logEvent } = require('../services/auditLog');
 
 async function register(req, res) {
   const { email, password, role } = req.body;
@@ -34,6 +35,7 @@ async function register(req, res) {
 
 async function login(req, res) {
   const { email, password } = req.body;
+  const ipAddress = req.ip || null;
 
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
@@ -44,11 +46,17 @@ async function login(req, res) {
     include: { roleRef: true },
   });
   if (!user) {
+    try {
+      logEvent({ action: 'user.login_failed', targetType: 'user', targetId: email, metadata: { email, reason: 'user_not_found' }, ipAddress });
+    } catch {}
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
+    try {
+      logEvent({ action: 'user.login_failed', targetType: 'user', targetId: user.id, metadata: { email, reason: 'invalid_password' }, ipAddress });
+    } catch {}
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
@@ -61,6 +69,10 @@ async function login(req, res) {
     process.env.JWT_SECRET,
     { expiresIn }
   );
+
+  try {
+    logEvent({ actorUserId: user.id, action: 'user.login', targetType: 'user', targetId: user.id, metadata: { method: 'local' }, ipAddress });
+  } catch {}
 
   return res.status(200).json({ token });
 }

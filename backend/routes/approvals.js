@@ -6,6 +6,7 @@ const { authenticate } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/rbac');
 const prisma = require('../src/db/client');
 const { actOnStep } = require('../services/workflowService');
+const { logEvent } = require('../services/auditLog');
 
 // GET /api/approvals — list workflows where any step is assigned to current user,
 // or (if no steps assigned) all pending workflows visible to the user's queue access.
@@ -85,6 +86,10 @@ router.post('/:workflowId/act', authenticate, requirePermission('documents:appro
       action,
       comment ?? null
     );
+    try {
+      const auditAction = `document.${action}`; // document.approved | document.rejected | document.changes_requested
+      logEvent({ actorUserId: req.user.userId || null, action: auditAction, targetType: 'approval_workflow', targetId: req.params.workflowId, metadata: { stepNumber, comment: comment ?? null, documentId: workflow.documentId }, ipAddress: req.ip || null });
+    } catch {}
     res.json(workflow);
   } catch (err) {
     if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message });
