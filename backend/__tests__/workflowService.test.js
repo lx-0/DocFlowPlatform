@@ -88,6 +88,9 @@ const mockPrisma = {
       mockDocuments.set(where.id, updated);
       return updated;
     },
+    findUnique: async ({ where }) => {
+      return mockDocuments.get(where.id) ?? null;
+    },
   },
 };
 

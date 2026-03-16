@@ -50,6 +50,7 @@ async function createWorkflow(documentId, queueName, steps, approverEmail) {
       steps: {
         create: Array.from({ length: steps }, (_, i) => ({
           stepNumber: i + 1,
+          startedAt: i === 0 ? new Date() : null,
         })),
       },
     },
@@ -145,10 +146,17 @@ async function actOnStep(workflowId, stepNumber, userId, action, comment) {
 
   if (action === 'approved') {
     if (stepNumber < workflow.totalSteps) {
-      // Advance to next step
+      // Advance to next step — stamp startedAt on the incoming step
       newCurrentStep = stepNumber + 1;
       newStatus = 'pending';
       docRoutingStatus = 'in_approval';
+      const nextStep = workflow.steps.find(s => s.stepNumber === newCurrentStep);
+      if (nextStep) {
+        await prisma.approvalStep.update({
+          where: { id: nextStep.id },
+          data: { startedAt: new Date() },
+        });
+      }
     } else {
       // Final step approved — workflow complete
       newStatus = 'approved';

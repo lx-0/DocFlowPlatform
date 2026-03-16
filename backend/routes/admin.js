@@ -405,6 +405,55 @@ router.get('/analytics/export', authenticate, requirePermission('admin:users'), 
   }
 });
 
+// ─── Escalations dashboard (/api/admin/escalations) ──────────────────────────
+
+// GET /api/admin/escalations — list currently escalated approval steps
+router.get('/escalations', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const steps = await prisma.approvalStep.findMany({
+      where: {
+        escalatedAt: { not: null },
+        action: null, // step not yet acted upon
+      },
+      include: {
+        workflow: {
+          include: {
+            document: {
+              include: {
+                metadata: true,
+                uploadedBy: { select: { id: true, email: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { escalatedAt: 'desc' },
+    });
+
+    const result = steps.map(step => ({
+      stepId: step.id,
+      workflowId: step.workflowId,
+      stepNumber: step.stepNumber,
+      escalatedAt: step.escalatedAt,
+      startedAt: step.startedAt,
+      backupApproverUserId: step.assignedToUserId,
+      document: {
+        id: step.workflow.document.id,
+        title: step.workflow.document?.metadata?.title || step.workflow.document.originalFilename,
+        uploadedBy: step.workflow.document.uploadedBy,
+        routingStatus: step.workflow.document.routingStatus,
+      },
+      workflowStatus: step.workflow.status,
+      queueName: step.workflow.queueName,
+    }));
+
+    res.json(result);
+  } catch (err) {
+    console.error('[Admin] GET /escalations error:', err);
+    res.status(500).json({ error: 'Failed to fetch escalated documents' });
+  }
+});
+
 // ─── System Settings (/api/admin/settings) ───────────────────────────────────
 
 function buildSettingsResponse(map) {

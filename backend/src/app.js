@@ -14,12 +14,14 @@ const notificationRoutes = require('../routes/notifications');
 const metricsAggregator = require('../jobs/metricsAggregator');
 const purgeJob = require('../jobs/purgeJob');
 const notificationPurgeJob = require('../jobs/notificationPurgeJob');
+const escalationJob = require('../jobs/escalationJob');
 
 const app = express();
 
 metricsAggregator.register();
 purgeJob.register();
 notificationPurgeJob.register();
+escalationJob.register();
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 app.use(helmet({

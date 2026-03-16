@@ -49,8 +49,27 @@ async function listRoutingRules(req, res) {
   res.json(rules);
 }
 
+function validateEscalationFields({ escalationEnabled, escalationDeadlineHours, backupApproverEmail }) {
+  if (escalationEnabled && !backupApproverEmail) {
+    return 'backupApproverEmail is required when escalationEnabled is true';
+  }
+  if (escalationEnabled && (escalationDeadlineHours === undefined || escalationDeadlineHours === null)) {
+    return 'escalationDeadlineHours is required when escalationEnabled is true';
+  }
+  if (escalationDeadlineHours !== undefined && escalationDeadlineHours !== null) {
+    const hours = parseInt(escalationDeadlineHours, 10);
+    if (isNaN(hours) || hours < 1) {
+      return 'escalationDeadlineHours must be a positive integer';
+    }
+  }
+  return null;
+}
+
 async function createRoutingRule(req, res) {
-  const { name, documentType, departmentTag, conditions, priority, targetQueue, isActive } = req.body;
+  const {
+    name, documentType, departmentTag, conditions, priority, targetQueue, isActive,
+    escalationEnabled, escalationDeadlineHours, backupApproverEmail,
+  } = req.body;
 
   if (!name || priority === undefined || priority === null || !targetQueue) {
     return res.status(400).json({ error: 'name, priority, and targetQueue are required' });
@@ -66,6 +85,15 @@ async function createRoutingRule(req, res) {
     return res.status(400).json({ error: condErr });
   }
 
+  const escalationErr = validateEscalationFields({
+    escalationEnabled: Boolean(escalationEnabled),
+    escalationDeadlineHours,
+    backupApproverEmail,
+  });
+  if (escalationErr) {
+    return res.status(400).json({ error: escalationErr });
+  }
+
   const rule = await prisma.routingRule.create({
     data: {
       id: uuidv4(),
@@ -76,6 +104,9 @@ async function createRoutingRule(req, res) {
       priority: parsedPriority,
       targetQueue,
       isActive: isActive !== undefined ? Boolean(isActive) : true,
+      escalationEnabled: escalationEnabled !== undefined ? Boolean(escalationEnabled) : false,
+      escalationDeadlineHours: escalationDeadlineHours != null ? parseInt(escalationDeadlineHours, 10) : null,
+      backupApproverEmail: backupApproverEmail ?? null,
     },
   });
 
@@ -84,7 +115,10 @@ async function createRoutingRule(req, res) {
 
 async function updateRoutingRule(req, res) {
   const { id } = req.params;
-  const { name, documentType, departmentTag, conditions, priority, targetQueue, isActive } = req.body;
+  const {
+    name, documentType, departmentTag, conditions, priority, targetQueue, isActive,
+    escalationEnabled, escalationDeadlineHours, backupApproverEmail,
+  } = req.body;
 
   const existing = await prisma.routingRule.findUnique({ where: { id } });
   if (!existing) {
@@ -94,6 +128,19 @@ async function updateRoutingRule(req, res) {
   const condErr = validateConditions(conditions);
   if (condErr) {
     return res.status(400).json({ error: condErr });
+  }
+
+  // Validate escalation fields against the merged state (existing + incoming)
+  const mergedEscalationEnabled = escalationEnabled !== undefined ? Boolean(escalationEnabled) : existing.escalationEnabled;
+  const mergedDeadlineHours = escalationDeadlineHours !== undefined ? escalationDeadlineHours : existing.escalationDeadlineHours;
+  const mergedBackupEmail = backupApproverEmail !== undefined ? backupApproverEmail : existing.backupApproverEmail;
+  const escalationErr = validateEscalationFields({
+    escalationEnabled: mergedEscalationEnabled,
+    escalationDeadlineHours: mergedDeadlineHours,
+    backupApproverEmail: mergedBackupEmail,
+  });
+  if (escalationErr) {
+    return res.status(400).json({ error: escalationErr });
   }
 
   const data = {};
@@ -110,6 +157,11 @@ async function updateRoutingRule(req, res) {
   }
   if (targetQueue !== undefined) data.targetQueue = targetQueue;
   if (isActive !== undefined) data.isActive = Boolean(isActive);
+  if (escalationEnabled !== undefined) data.escalationEnabled = Boolean(escalationEnabled);
+  if (escalationDeadlineHours !== undefined) {
+    data.escalationDeadlineHours = escalationDeadlineHours != null ? parseInt(escalationDeadlineHours, 10) : null;
+  }
+  if (backupApproverEmail !== undefined) data.backupApproverEmail = backupApproverEmail ?? null;
 
   const rule = await prisma.routingRule.update({ where: { id }, data });
   res.json(rule);
