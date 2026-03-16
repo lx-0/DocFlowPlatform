@@ -1,7 +1,11 @@
 'use strict';
 
 const prisma = require('../src/db/client');
-const { sendAssignmentEmail, sendStatusChangeEmail } = require('./notificationService');
+const {
+  sendDocumentSubmitted,
+  sendDocumentApproved,
+  sendDocumentRejected,
+} = require('./email');
 
 /**
  * Creates an ApprovalWorkflow and its step records for a document.
@@ -40,10 +44,10 @@ async function createWorkflow(documentId, queueName, steps, approverEmail) {
         where: { id: documentId },
         include: { metadata: true },
       });
-      const documentTitle = doc?.metadata?.title || doc?.originalFilename || documentId;
-      await sendAssignmentEmail(approverEmail, documentTitle, workflow.id);
+      const title = doc?.metadata?.title || doc?.originalFilename || documentId;
+      await sendDocumentSubmitted(approverEmail, { id: documentId, title });
     } catch (err) {
-      console.error('[WorkflowService] Failed to send assignment notification:', err.message);
+      console.error('[WorkflowService] Failed to send submission notification:', err.message);
     }
   }
 
@@ -124,20 +128,26 @@ async function actOnStep(workflowId, stepNumber, userId, action, comment) {
     data: { routingStatus: docRoutingStatus },
   });
 
-  // Send status change notification for terminal workflow states
-  const terminalStatuses = ['approved', 'rejected', 'changes_requested'];
-  if (terminalStatuses.includes(newStatus)) {
+  // Send lifecycle email for terminal workflow states
+  if (newStatus === 'approved' || newStatus === 'rejected') {
     try {
       const doc = await prisma.document.findUnique({
         where: { id: workflow.documentId },
         include: { metadata: true, uploadedBy: true },
       });
       if (doc?.uploadedBy?.email) {
-        const documentTitle = doc?.metadata?.title || doc?.originalFilename || workflow.documentId;
-        await sendStatusChangeEmail(doc.uploadedBy.email, documentTitle, newStatus, comment);
+        const docObj = {
+          id: workflow.documentId,
+          title: doc?.metadata?.title || doc?.originalFilename || workflow.documentId,
+        };
+        if (newStatus === 'approved') {
+          await sendDocumentApproved(doc.uploadedBy.email, docObj);
+        } else {
+          await sendDocumentRejected(doc.uploadedBy.email, docObj, comment);
+        }
       }
     } catch (err) {
-      console.error('[WorkflowService] Failed to send status change notification:', err.message);
+      console.error('[WorkflowService] Failed to send lifecycle notification:', err.message);
     }
   }
 

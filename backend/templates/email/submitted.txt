@@ -1,0 +1,13 @@
+New Document Awaiting Your Review
+===================================
+
+A document has been submitted and is awaiting your review.
+
+Document:    {{documentTitle}}
+Document ID: {{documentId}}
+
+Please log in to DocFlow to review the document:
+  /approver/queue
+
+---
+This is an automated notification from DocFlow.

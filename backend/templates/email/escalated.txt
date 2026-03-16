@@ -1,0 +1,13 @@
+A Document Has Been Escalated to You
+======================================
+
+A document has been escalated and requires your attention.
+
+Document:    {{documentTitle}}
+Document ID: {{documentId}}
+
+Review the escalated document at:
+  /approver/queue
+
+---
+This is an automated notification from DocFlow.
