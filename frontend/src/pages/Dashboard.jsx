@@ -24,7 +24,7 @@ export default function Dashboard() {
         <div style={styles.logo}>DocFlow</div>
         <nav style={styles.nav}>
           <a href="#" style={{ ...styles.navItem, ...styles.navItemActive }}>Dashboard</a>
-          <a href="#" style={styles.navItem}>Documents</a>
+          <Link to="/documents" style={styles.navItem}>Documents</Link>
           <a href="#" style={styles.navItem}>Workflows</a>
           <Link to="/approvals" style={styles.navItem}>Approvals</Link>
           <a href="#" style={styles.navItem}>Settings</a>

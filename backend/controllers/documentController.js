@@ -132,6 +132,7 @@ async function listDocuments(req, res) {
       mimeType: true,
       sizeBytes: true,
       status: true,
+      routingStatus: true,
       createdAt: true,
     },
     orderBy: { createdAt: 'desc' },
@@ -141,8 +142,13 @@ async function listDocuments(req, res) {
 }
 
 async function getDocument(req, res) {
+  const isAdmin = req.user.role === 'admin';
+  const where = isAdmin
+    ? { id: req.params.id }
+    : { id: req.params.id, uploadedByUserId: req.user.userId };
+
   const doc = await prisma.document.findFirst({
-    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+    where,
     select: {
       id: true,
       originalFilename: true,
@@ -153,6 +159,27 @@ async function getDocument(req, res) {
       routingStatus: true,
       createdAt: true,
       updatedAt: true,
+      approvalWorkflow: {
+        select: {
+          id: true,
+          queueName: true,
+          currentStep: true,
+          totalSteps: true,
+          status: true,
+          createdAt: true,
+          steps: {
+            select: {
+              id: true,
+              stepNumber: true,
+              assignedToUserId: true,
+              action: true,
+              comment: true,
+              actedAt: true,
+            },
+            orderBy: { stepNumber: 'asc' },
+          },
+        },
+      },
     },
   });
 

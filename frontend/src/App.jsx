@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Documents from './pages/Documents'
+import DocumentDetail from './pages/DocumentDetail'
 import ApprovalQueue from './pages/ApprovalQueue'
 import ApprovalReview from './pages/ApprovalReview'
 import RoutingRulesAdmin from './pages/RoutingRulesAdmin'
@@ -11,6 +13,8 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/documents" element={<Documents />} />
+        <Route path="/documents/:id" element={<DocumentDetail />} />
         <Route path="/approvals" element={<ApprovalQueue />} />
         <Route path="/approvals/:workflowId" element={<ApprovalReview />} />
         <Route path="/admin/routing-rules" element={<RoutingRulesAdmin />} />
