@@ -77,6 +77,7 @@ docflow-platform/
 
 | Document | Description |
 |:---------|:------------|
+| [docs/user-guide/README.md](docs/user-guide/README.md) | End-user guide — submitter, approver, and admin guides |
 | [docs/architecture.md](docs/architecture.md) | System design, component relationships, and data flow |
 | [docs/api-reference.md](docs/api-reference.md) | Full REST API reference |
 | [docs/contributing.md](docs/contributing.md) | Contribution guide and PR workflow |
