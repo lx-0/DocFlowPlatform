@@ -9,6 +9,7 @@ import RoutingRulesAdmin from './pages/RoutingRulesAdmin'
 import AdminUsers from './pages/AdminUsers'
 import AdminRoles from './pages/AdminRoles'
 import AdminAuditLogs from './pages/AdminAuditLogs'
+import AdminAnalytics from './pages/AdminAnalytics'
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/admin/users" element={<AdminUsers />} />
         <Route path="/admin/roles" element={<AdminRoles />} />
         <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
+        <Route path="/admin/analytics" element={<AdminAnalytics />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

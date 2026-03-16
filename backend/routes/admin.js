@@ -4,10 +4,12 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcryptjs');
+const PDFDocument = require('pdfkit');
 const { authenticate } = require('../middleware/auth');
 const { requirePermission, invalidateRoleCache } = require('../middleware/rbac');
 const prisma = require('../src/db/client');
 const { logEvent } = require('../services/auditLog');
+const { getVolumeStats, getApprovalTimeStats, getRejectionRate } = require('../services/analytics');
 
 // All admin routes require authentication first
 
@@ -208,6 +210,177 @@ router.delete('/api-keys/:id', authenticate, requirePermission('admin:users'), a
   } catch (err) {
     console.error('[Admin] DELETE /api-keys/:id error:', err);
     res.status(500).json({ error: 'Failed to revoke API key' });
+  }
+});
+
+// ─── Analytics (/api/admin/analytics) ────────────────────────────────────────
+
+router.get('/analytics/volume', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const data = await getVolumeStats({ from, to });
+    res.json(data);
+  } catch (err) {
+    console.error('[Admin] GET /analytics/volume error:', err);
+    res.status(500).json({ error: 'Failed to fetch volume stats' });
+  }
+});
+
+router.get('/analytics/approval-time', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const data = await getApprovalTimeStats({ from, to });
+    res.json(data);
+  } catch (err) {
+    console.error('[Admin] GET /analytics/approval-time error:', err);
+    res.status(500).json({ error: 'Failed to fetch approval time stats' });
+  }
+});
+
+router.get('/analytics/rejection-rate', authenticate, requirePermission('admin:users'), async (req, res) => {
+  try {
+    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const data = await getRejectionRate({ from, to });
+    res.json(data);
+  } catch (err) {
+    console.error('[Admin] GET /analytics/rejection-rate error:', err);
+    res.status(500).json({ error: 'Failed to fetch rejection rate stats' });
+  }
+});
+
+router.get('/analytics/export', authenticate, requirePermission('admin:users'), async (req, res) => {
+  const { format, from, to } = req.query;
+
+  if (!format || !['csv', 'pdf'].includes(format)) {
+    return res.status(400).json({ error: 'format must be "csv" or "pdf"' });
+  }
+
+  const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const toDate = to ? new Date(to) : new Date();
+  const fromStr = fromDate.toISOString().slice(0, 10);
+  const toStr = toDate.toISOString().slice(0, 10);
+  const filename = `docflow-report-${fromStr}-${toStr}.${format}`;
+
+  try {
+    const [volumeRows, approvalTimeRows, rejectionRateRows] = await Promise.all([
+      getVolumeStats({ from: fromDate, to: toDate }),
+      getApprovalTimeStats({ from: fromDate, to: toDate }),
+      getRejectionRate({ from: fromDate, to: toDate }),
+    ]);
+
+    // Build a combined map keyed by date
+    const dateSet = new Set([
+      ...volumeRows.map(r => r.date),
+      ...approvalTimeRows.map(r => r.date),
+      ...rejectionRateRows.map(r => r.date),
+    ]);
+    const approvalMap = new Map(approvalTimeRows.map(r => [r.date, r.avgApprovalTimeMs]));
+    const rejectionMap = new Map(rejectionRateRows.map(r => [r.date, r.rejectionRate]));
+    const volumeMap = new Map(volumeRows.map(r => [r.date, r]));
+
+    const rows = [...dateSet].sort().map(date => {
+      const v = volumeMap.get(date) || { submitted: 0, approved: 0, rejected: 0 };
+      const avgMs = approvalMap.get(date);
+      const rej = rejectionMap.get(date);
+      return {
+        date,
+        submitted: v.submitted,
+        approved: v.approved,
+        rejected: v.rejected,
+        avgApprovalDays: avgMs != null ? (avgMs / 86400000).toFixed(2) : '',
+        rejectionRatePct: rej != null ? (rej * 100).toFixed(1) : '',
+      };
+    });
+
+    if (format === 'csv') {
+      const header = 'Date,Submitted,Approved,Rejected,AvgApprovalDays,RejectionRate%\n';
+      const body = rows.map(r =>
+        `${r.date},${r.submitted},${r.approved},${r.rejected},${r.avgApprovalDays},${r.rejectionRatePct}`
+      ).join('\n');
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(header + body);
+    }
+
+    // PDF
+    const doc = new PDFDocument({ margin: 50 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    doc.pipe(res);
+
+    // Title
+    doc.fontSize(20).font('Helvetica-Bold').text('DocFlow Analytics Report', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(11).font('Helvetica').text(`Date range: ${fromStr} to ${toStr}`, { align: 'center' });
+    doc.moveDown(1.5);
+
+    // Summary stats
+    const totalSubmitted = rows.reduce((s, r) => s + r.submitted, 0);
+    const totalApproved = rows.reduce((s, r) => s + r.approved, 0);
+    const totalRejected = rows.reduce((s, r) => s + r.rejected, 0);
+    const totalDecided = totalApproved + totalRejected;
+    const overallRejRate = totalDecided > 0 ? ((totalRejected / totalDecided) * 100).toFixed(1) : 'N/A';
+    const approvalTimeSamples = approvalTimeRows.filter(r => r.avgApprovalTimeMs != null);
+    const overallAvgDays = approvalTimeSamples.length > 0
+      ? (approvalTimeSamples.reduce((s, r) => s + r.avgApprovalTimeMs, 0) / approvalTimeSamples.length / 86400000).toFixed(2)
+      : 'N/A';
+
+    doc.fontSize(13).font('Helvetica-Bold').text('Summary');
+    doc.moveDown(0.5);
+    doc.fontSize(11).font('Helvetica');
+    doc.text(`Total Submitted:       ${totalSubmitted}`);
+    doc.text(`Total Approved:        ${totalApproved}`);
+    doc.text(`Total Rejected:        ${totalRejected}`);
+    doc.text(`Overall Rejection Rate: ${overallRejRate}%`);
+    doc.text(`Avg Approval Time:     ${overallAvgDays} days`);
+    doc.moveDown(1.5);
+
+    // Daily breakdown table
+    doc.fontSize(13).font('Helvetica-Bold').text('Daily Breakdown');
+    doc.moveDown(0.5);
+
+    const colWidths = [80, 65, 65, 65, 100, 100];
+    const headers = ['Date', 'Submitted', 'Approved', 'Rejected', 'Avg Approval (days)', 'Rejection Rate %'];
+    const startX = 50;
+    let y = doc.y;
+
+    // Table header
+    doc.fontSize(9).font('Helvetica-Bold');
+    let x = startX;
+    headers.forEach((h, i) => {
+      doc.text(h, x, y, { width: colWidths[i], lineBreak: false });
+      x += colWidths[i];
+    });
+    y += 16;
+    doc.moveTo(startX, y).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y).stroke();
+    y += 4;
+
+    // Table rows
+    doc.font('Helvetica').fontSize(9);
+    for (const r of rows) {
+      if (y > doc.page.height - 80) {
+        doc.addPage();
+        y = 50;
+      }
+      x = startX;
+      const cells = [r.date, r.submitted, r.approved, r.rejected, r.avgApprovalDays || 'N/A', r.rejectionRatePct ? `${r.rejectionRatePct}%` : 'N/A'];
+      cells.forEach((cell, i) => {
+        doc.text(String(cell), x, y, { width: colWidths[i], lineBreak: false });
+        x += colWidths[i];
+      });
+      y += 14;
+    }
+
+    doc.end();
+  } catch (err) {
+    console.error('[Admin] GET /analytics/export error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate export' });
+    }
   }
 });
 
