@@ -1,3 +1,4 @@
+import NotificationBell from '../components/NotificationBell'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 
@@ -124,6 +125,7 @@ export default function AdminSettings() {
       <main style={styles.main}>
         <header style={styles.header}>
           <h1 style={styles.pageTitle}>System Settings</h1>
+          <NotificationBell />
         </header>
 
         {error && <div style={styles.errorBanner}>{error}</div>}

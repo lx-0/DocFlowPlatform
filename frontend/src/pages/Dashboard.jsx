@@ -1,4 +1,5 @@
 import { useNavigate, Link } from 'react-router-dom'
+import NotificationBell from '../components/NotificationBell'
 
 function getUserRole(token) {
   try {
@@ -41,6 +42,7 @@ export default function Dashboard() {
       <main style={styles.main}>
         <header style={styles.header}>
           <h1 style={styles.pageTitle}>Dashboard</h1>
+          <NotificationBell />
         </header>
         <div style={styles.content}>
           <div style={styles.statsRow}>
@@ -130,6 +132,9 @@ const styles = {
     padding: '1.5rem 2rem',
     borderBottom: '1px solid #e5e7eb',
     background: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   pageTitle: {
     fontSize: '1.25rem',

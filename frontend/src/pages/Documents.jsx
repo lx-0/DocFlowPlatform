@@ -1,3 +1,4 @@
+import NotificationBell from '../components/NotificationBell'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 
@@ -74,6 +75,7 @@ export default function Documents() {
       <main style={styles.main}>
         <header style={styles.header}>
           <h1 style={styles.pageTitle}>My Documents</h1>
+          <NotificationBell />
         </header>
 
         <div style={styles.content}>
@@ -168,6 +170,9 @@ const styles = {
     padding: '1.5rem 2rem',
     borderBottom: '1px solid #e5e7eb',
     background: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   pageTitle: { fontSize: '1.25rem', fontWeight: 600, color: '#111827' },
   content: { padding: '2rem' },

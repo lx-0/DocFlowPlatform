@@ -42,18 +42,36 @@ model RolePermission {
 }
 
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
-  passwordHash String
-  role         String     @default("user")
-  roleId       String?
-  roleRef      Role?      @relation(fields: [roleId], references: [id])
-  createdAt    DateTime   @default(now())
-  documents    Document[]
-  apiKeys      ApiKey[]
-  webhooks     Webhook[]
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String
+  role          String         @default("user")
+  roleId        String?
+  roleRef       Role?          @relation(fields: [roleId], references: [id])
+  createdAt     DateTime       @default(now())
+  documents     Document[]
+  apiKeys       ApiKey[]
+  webhooks      Webhook[]
+  notifications Notification[]
 
   @@map("users")
+}
+
+/// In-app notification for a user (document lifecycle alerts).
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  linkUrl   String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("notifications")
 }
 
 model ApiKey {

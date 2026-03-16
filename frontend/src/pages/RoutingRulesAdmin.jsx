@@ -1,3 +1,4 @@
+import NotificationBell from '../components/NotificationBell'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 
@@ -145,6 +146,7 @@ export default function RoutingRulesAdmin() {
       <main style={styles.main}>
         <header style={styles.header}>
           <h1 style={styles.pageTitle}>Routing Rules</h1>
+          <NotificationBell />
           <button onClick={openAddModal} style={styles.addBtn}>+ Add Rule</button>
         </header>
         <div style={styles.content}>

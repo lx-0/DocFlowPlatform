@@ -1,3 +1,4 @@
+import NotificationBell from '../components/NotificationBell'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 
@@ -114,6 +115,7 @@ export default function AdminAuditLogs() {
       <main style={styles.main}>
         <header style={styles.header}>
           <h1 style={styles.pageTitle}>Audit Logs</h1>
+          <NotificationBell />
         </header>
         <div style={styles.content}>
           {/* Filters */}
@@ -250,7 +252,14 @@ const styles = {
     textAlign: 'left',
   },
   main: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto' },
-  header: { padding: '1.5rem 2rem', borderBottom: '1px solid #e5e7eb', background: '#fff' },
+  header: {
+    padding: '1.5rem 2rem',
+    borderBottom: '1px solid #e5e7eb',
+    background: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   pageTitle: { fontSize: '1.25rem', fontWeight: 600, color: '#111827' },
   content: { padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' },
   filterBar: { display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' },

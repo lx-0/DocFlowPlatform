@@ -1,3 +1,4 @@
+import NotificationBell from '../components/NotificationBell'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
@@ -173,6 +174,7 @@ export default function AdminAnalytics() {
       <main style={styles.main}>
         <header style={styles.header}>
           <h1 style={styles.pageTitle}>Analytics</h1>
+          <NotificationBell />
           <div style={styles.headerActions}>
             <div style={styles.presetBtns}>
               {[7, 30, 90].map(d => (

@@ -10,13 +10,16 @@ const approvalsRoutes = require('../routes/approvals');
 const adminRoutes = require('../routes/admin');
 const v1Routes = require('../routes/v1');
 const webhookRoutes = require('../routes/webhooks');
+const notificationRoutes = require('../routes/notifications');
 const metricsAggregator = require('../jobs/metricsAggregator');
 const purgeJob = require('../jobs/purgeJob');
+const notificationPurgeJob = require('../jobs/notificationPurgeJob');
 
 const app = express();
 
 metricsAggregator.register();
 purgeJob.register();
+notificationPurgeJob.register();
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 app.use(helmet({
@@ -63,5 +66,6 @@ app.use('/api/approvals', approvalsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/v1', v1Routes);
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 module.exports = app;

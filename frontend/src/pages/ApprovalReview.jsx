@@ -1,3 +1,4 @@
+import NotificationBell from '../components/NotificationBell'
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 
@@ -86,6 +87,7 @@ export default function ApprovalReview() {
           <div style={styles.headerInner}>
             <Link to="/approvals" style={styles.backLink}>← Approval Queue</Link>
             <h1 style={styles.pageTitle}>Document Review</h1>
+          <NotificationBell />
           </div>
         </header>
 
@@ -264,6 +266,9 @@ const styles = {
     padding: '1.5rem 2rem',
     borderBottom: '1px solid #e5e7eb',
     background: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerInner: {
     display: 'flex',

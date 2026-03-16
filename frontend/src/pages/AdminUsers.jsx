@@ -1,3 +1,4 @@
+import NotificationBell from '../components/NotificationBell'
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 
@@ -94,6 +95,7 @@ export default function AdminUsers() {
       <main style={styles.main}>
         <header style={styles.header}>
           <h1 style={styles.pageTitle}>User Management</h1>
+          <NotificationBell />
         </header>
         <div style={styles.content}>
           {loading && <p style={styles.message}>Loading…</p>}
@@ -211,6 +213,9 @@ const styles = {
     padding: '1.5rem 2rem',
     borderBottom: '1px solid #e5e7eb',
     background: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   pageTitle: {
     fontSize: '1.25rem',

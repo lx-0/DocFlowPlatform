@@ -24,6 +24,11 @@ const {
   sendDocumentRejected,
 } = require('./email');
 const { deliverEvent } = require('./webhook');
+const {
+  notifySubmitted,
+  notifyApproved,
+  notifyRejected,
+} = require('./inAppNotification');
 
 /**
  * Creates an ApprovalWorkflow and its step records for a document.
@@ -67,6 +72,15 @@ async function createWorkflow(documentId, queueName, steps, approverEmail) {
       await sendDocumentSubmitted(approverEmail, { id: documentId, title });
     } catch (err) {
       console.error('[WorkflowService] Failed to send submission notification:', err.message);
+    }
+    // In-app notification: look up approver by email
+    try {
+      const approver = await prisma.user.findUnique({ where: { email: approverEmail }, select: { id: true } });
+      if (approver) {
+        await notifySubmitted(approver.id, { id: documentId, title });
+      }
+    } catch (err) {
+      console.error('[WorkflowService] Failed to create in-app submission notification:', err.message);
     }
   }
 
@@ -169,6 +183,12 @@ async function actOnStep(workflowId, stepNumber, userId, action, comment) {
           } else {
             await sendDocumentRejected(doc.uploadedBy.email, docObj, comment);
           }
+        }
+        // In-app notifications for terminal states
+        if (newStatus === 'approved') {
+          await notifyApproved(doc.uploadedByUserId, docObj);
+        } else {
+          await notifyRejected(doc.uploadedByUserId, docObj, comment);
         }
         const webhookEvent = newStatus === 'approved' ? 'document.approved' : 'document.rejected';
         deliverEvent(doc.uploadedByUserId, webhookEvent, buildDocPayload(doc));

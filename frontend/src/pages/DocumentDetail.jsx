@@ -1,3 +1,4 @@
+import NotificationBell from '../components/NotificationBell'
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 
@@ -90,6 +91,7 @@ export default function DocumentDetail() {
           <div style={styles.headerInner}>
             <Link to="/documents" style={styles.backLink}>← My Documents</Link>
             <h1 style={styles.pageTitle}>{doc?.originalFilename || 'Document Detail'}</h1>
+          <NotificationBell />
           </div>
         </header>
 
@@ -259,6 +261,9 @@ const styles = {
     padding: '1.5rem 2rem',
     borderBottom: '1px solid #e5e7eb',
     background: '#fff',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerInner: { display: 'flex', flexDirection: 'column', gap: '0.25rem' },
   backLink: { fontSize: '0.875rem', color: '#2563eb', textDecoration: 'none' },
