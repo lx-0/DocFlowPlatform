@@ -1,7 +1,7 @@
 # M6 Release Notes — Notifications & Integrations
 
 **Release:** Milestone 6
-**Date:** March 2026 _(draft — finalise once DOCA-58 and DOCA-59 land)_
+**Date:** 2026-03-16
 **Audience:** End users, system administrators, integration developers
 
 ---
@@ -50,20 +50,20 @@ Users can now see a real-time notification inbox in the DocFlow interface withou
 
 ---
 
-### User Notification Preferences _(finalising — DOCA-58 in progress)_
+### User Notification Preferences
 
-Users will be able to opt in or out of email and in-app notifications independently for each event type, reducing noise while preserving critical alerts.
+Users can opt in or out of email and in-app notifications independently for each event type, reducing noise while preserving critical alerts.
 
 - **Per-event toggles** — a new settings page at `/settings/notifications` presents a table with a row for each event type and separate toggles for the Email and In-App channels.
 - **Default all-on** — all notifications are enabled by default on first login, matching enterprise expectations.
-- **Preference-aware dispatch** — both the email and in-app dispatch services will check preferences before sending; opting out of a channel suppresses delivery without affecting the other channel.
+- **Preference-aware dispatch** — both the email and in-app dispatch services check preferences before sending; opting out of a channel suppresses delivery without affecting the other channel.
 - **Admin exception** — the `document.escalated` event is always delivered to admins regardless of preference settings.
 
 ---
 
-### Admin SMTP Configuration & Template Management _(finalising — DOCA-59 in progress)_
+### Admin SMTP Configuration & Template Management
 
-Administrators will be able to configure the DocFlow mail server and customise notification email templates directly from the Admin UI, without requiring environment variable changes or redeploys.
+Administrators can configure the DocFlow mail server and customise notification email templates directly from the Admin UI, without requiring environment variable changes or redeploys.
 
 - **SMTP settings UI** — a new "Email" tab on the `/admin/settings` page exposes all SMTP fields (`smtpHost`, `smtpPort`, `smtpUser`, `smtpPass`, `smtpFromAddress`, `smtpFromName`). A "Send test email" button verifies the configuration before saving. Environment variable values serve as fallback when database settings are absent.
 - **Encrypted at rest** — SMTP passwords are stored using AES-256 encryption keyed by `ENCRYPTION_KEY`. All changes are recorded in the audit log (`system.smtp_config_changed`).
@@ -76,10 +76,9 @@ Administrators will be able to configure the DocFlow mail server and customise n
 
 The following items are known gaps at M6 release. They will be addressed in M7:
 
-- **WebSocket/SSE push** — in-app notifications use 60-second polling. Real-time server-sent events (or WebSocket delivery) are planned for a future milestone.
+- **WebSocket/SSE push** — in-app notifications use 60-second polling. Real-time server-sent events (or WebSocket delivery) are not included in this release.
 - **Mobile notification center** — the notification bell panel is not optimised for mobile viewports in this release. Mobile responsiveness is out of scope for M6.
 - **Webhook HTTPS enforcement** — webhook delivery requires HTTPS URLs in production. HTTP is permitted in development and test environments only.
-- **Advanced workflow notifications** — event types related to the advanced approval workflow (DOCA-64 escalation rules, bulk actions) will be added in M7.
 
 ---
 
@@ -97,7 +96,7 @@ No data loss occurs — all new tables are additive.
 
 ### Email transport
 
-Configure SMTP credentials in `backend/.env` (or via the Admin UI once DOCA-59 lands):
+Configure SMTP credentials in `backend/.env` (or via the Admin UI at `/admin/settings`):
 
 | Variable | Required | Description |
 |:---------|:---------|:------------|
@@ -109,7 +108,7 @@ Configure SMTP credentials in `backend/.env` (or via the Admin UI once DOCA-59 l
 
 ### Admin SMTP encryption key
 
-Once DOCA-59 lands, set `ENCRYPTION_KEY` in `backend/.env` (minimum 32 bytes, base64-encoded) before using the Admin UI SMTP settings form:
+Set `ENCRYPTION_KEY` in `backend/.env` (minimum 32 bytes, base64-encoded) before using the Admin UI SMTP settings form:
 
 ```env
 ENCRYPTION_KEY=<your-32-byte-base64-key>

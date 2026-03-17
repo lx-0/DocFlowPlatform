@@ -6,7 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [M6] — Notifications & Integrations — 2026-03-16 _(draft — finalise once DOCA-58 and DOCA-59 land)_
+## [M7] — Advanced Workflow & Automation — 2026-03-17
+
+Full release notes: [docs/releases/m7-advanced-workflow.md](docs/releases/m7-advanced-workflow.md)
+
+### Added
+
+- **Conditional routing** — rule-based document routing using document metadata conditions. Rules are evaluated against metadata fields at submission time to select the appropriate approval queue. API: `POST /api/routing-rules`, `GET /api/routing-rules`, `PUT /api/routing-rules/:id`, `DELETE /api/routing-rules/:id`.
+- **Approval escalation** — overdue approvals are automatically escalated to configured backup approvers when the primary approver has not acted within the escalation deadline. Escalation window is configurable per queue. Escalation events fire the `document.escalated` notification.
+- **Approval delegation** — approvers can delegate their approval authority to another user for a defined period (e.g., out-of-office). Delegated approvals are recorded separately in the audit log. API: `POST /api/approvals/delegate`, `DELETE /api/approvals/delegate`.
+- **Document versioning** — uploaded documents maintain a full version history. Each re-upload or edit creates a new version entry with uploader identity and timestamp. API: `GET /api/documents/:id/versions`, `GET /api/documents/:id/versions/:versionId/download`.
+- **Bulk document operations** — admins and approvers can submit, approve, or reject multiple documents in a single action from the document list view. Bulk operations emit individual lifecycle events per document for notification and audit purposes. API: `POST /api/documents/bulk/submit`, `POST /api/documents/bulk/approve`, `POST /api/documents/bulk/reject`.
+
+---
+
+## [M6] — Notifications & Integrations — 2026-03-16
 
 Full release notes: [docs/releases/m6-notifications-integrations.md](docs/releases/m6-notifications-integrations.md)
 
@@ -15,12 +29,12 @@ Full release notes: [docs/releases/m6-notifications-integrations.md](docs/releas
 - **Email notifications** — transactional emails for all document lifecycle events (`document.submitted`, `document.approved`, `document.rejected`, `document.assigned`, `document.escalated`). Async delivery via configurable SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`). HTML + plain-text templates in `src/templates/email/`. `EMAIL_ENABLED=false` logs to console in dev.
 - **Webhook event delivery** — external systems can subscribe to document lifecycle events via registered webhooks. HMAC-signed payloads (`X-DocFlow-Signature`), up-to-3 retry with exponential back-off, full delivery log. API: `POST /api/webhooks`, `GET /api/webhooks`, `DELETE /api/webhooks/:id`, `GET /api/webhooks/:id/deliveries`.
 - **In-app notification center** — per-user notification inbox in the top nav. Unread badge, dropdown panel, "Mark all read" button, 60-second polling. Notifications purged after 30 days. API: `GET /api/notifications`, `PATCH /api/notifications/:id/read`, `POST /api/notifications/read-all`, `GET /api/notifications/unread-count`.
-- **User notification preferences** _(DOCA-58, in progress)_ — per-event opt-in/out controls for email and in-app channels. Settings page at `/settings/notifications`. Dispatch services check preferences before sending.
-- **Admin SMTP configuration & template management** _(DOCA-59, in progress)_ — admin UI "Email" tab at `/admin/settings` for SMTP credentials (AES-256 encrypted at rest) with test-send button. Template editor for per-event subject and body with live preview. Audit log entry on config changes.
+- **User notification preferences** — per-event opt-in/out controls for email and in-app channels. Settings page at `/settings/notifications`. Dispatch services check preferences before sending.
+- **Admin SMTP configuration & template management** — admin UI "Email" tab at `/admin/settings` for SMTP credentials (AES-256 encrypted at rest) with test-send button. Template editor for per-event subject and body with live preview. Audit log entry on config changes.
 
 ### Known Limitations
 
-- In-app notifications use 60-second polling; WebSocket/SSE real-time push is planned for M7.
+- In-app notifications use 60-second polling; WebSocket/SSE real-time push is not included in this release.
 - Notification center is not mobile-optimised in this release.
 - Webhook delivery requires HTTPS URLs in production.
 
