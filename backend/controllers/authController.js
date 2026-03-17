@@ -77,4 +77,23 @@ async function login(req, res) {
   return res.status(200).json({ token });
 }
 
-module.exports = { register, login };
+async function logout(req, res) {
+  // JWT is stateless — there is nothing to revoke server-side.
+  // This endpoint exists for audit logging and to give clients a clean signout path.
+  try {
+    const authHeader = req.headers.authorization;
+    let userId = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
+        userId = decoded.userId;
+      } catch {}
+    }
+    logEvent({ actorUserId: userId, action: 'user.logout', targetType: 'user', targetId: userId || 'unknown', metadata: { method: 'local' }, ipAddress: req.ip || null });
+  } catch {}
+
+  return res.status(200).json({ message: 'Logged out' });
+}
+
+module.exports = { register, login, logout };
