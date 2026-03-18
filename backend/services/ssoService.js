@@ -15,7 +15,7 @@
  */
 
 const passport = require('passport');
-const { Strategy: SamlStrategy } = require('passport-saml');
+const { Strategy: SamlStrategy } = require('@node-saml/passport-saml');
 const { Issuer } = require('openid-client');
 const jwt = require('jsonwebtoken');
 const prisma = require('../src/db/client');
