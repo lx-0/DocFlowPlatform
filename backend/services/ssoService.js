@@ -4,14 +4,17 @@
  * SSO Service — supports SAML 2.0 and OIDC.
  *
  * Configuration via environment variables:
- *   SSO_PROVIDER       — 'saml' | 'oidc'  (required to enable SSO)
- *   SSO_ENTRY_POINT    — IdP SSO URL (SAML) / authorization endpoint (OIDC)
- *   SSO_ISSUER         — SP entity ID (SAML) / OIDC issuer URL
- *   SSO_CERT           — IdP public certificate PEM (SAML)
- *   SSO_CLIENT_ID      — OIDC client ID
- *   SSO_CLIENT_SECRET  — OIDC client secret
- *   SSO_CALLBACK_URL   — ACS URL (SAML) / redirect URI (OIDC)
- *   SSO_ROLE_CLAIM     — claim name in IdP assertion that carries the role
+ *   SSO_PROVIDER           — 'saml' | 'oidc'  (required to enable SSO)
+ *   SSO_ENTRY_POINT        — IdP SSO URL (SAML) / authorization endpoint (OIDC)
+ *   SSO_ISSUER             — SP entity ID (SAML) / OIDC issuer URL
+ *   SSO_CERT               — IdP public certificate PEM (SAML)
+ *   SSO_CLIENT_ID          — OIDC client ID
+ *   SSO_CLIENT_SECRET      — OIDC client secret
+ *   SSO_CALLBACK_URL       — ACS URL (SAML) / redirect URI (OIDC)
+ *   SSO_ROLE_CLAIM         — claim name in IdP assertion that carries the role
+ *   SAML_SLO_URL           — SAML IdP Single Logout endpoint (optional; enables SLO)
+ *   OIDC_END_SESSION_URL   — OIDC end_session_endpoint override (optional; auto-discovered otherwise)
+ *   APP_URL                — Base URL of DocFlow (e.g. https://docflow.corp.com); used for post-logout redirect
  */
 
 const passport = require('passport');
@@ -66,12 +69,14 @@ async function provisionUser(email, ssoRole) {
 
 /**
  * Issue a JWT for a provisioned user.
+ * @param {object} user - Provisioned user record.
+ * @param {object} [extraClaims={}] - Additional claims to embed (e.g. samlNameId, samlSessionIndex).
  */
-function issueJwt(user) {
+function issueJwt(user, extraClaims = {}) {
   const roleName = user.roleRef ? user.roleRef.name : user.role;
   const expiresIn = process.env.JWT_EXPIRES_IN || '8h';
   return jwt.sign(
-    { userId: user.id, email: user.email, role: roleName },
+    { userId: user.id, email: user.email, role: roleName, ...extraClaims },
     process.env.JWT_SECRET,
     { expiresIn }
   );
@@ -87,6 +92,7 @@ function buildSamlStrategy() {
     issuer: process.env.SSO_ISSUER,
     cert: process.env.SSO_CERT,
     callbackUrl: process.env.SSO_CALLBACK_URL,
+    logoutUrl: process.env.SAML_SLO_URL || undefined,
     wantAssertionsSigned: true,
   };
 
@@ -99,11 +105,47 @@ function buildSamlStrategy() {
       const ssoRole = roleClaimKey ? profile[roleClaimKey] : null;
 
       const user = await provisionUser(email, ssoRole);
+      // Attach SAML session info for SLO use — the controller embeds these in the DocFlow JWT
+      user._samlNameId = profile.nameID || email;
+      user._samlSessionIndex = profile.sessionIndex || null;
       return done(null, user);
     } catch (err) {
       return done(err);
     }
   });
+}
+
+/**
+ * Build a SAML SP-initiated Single Logout redirect URL.
+ * Returns null if SAML_SLO_URL is not configured.
+ *
+ * @param {string} nameId - The user's SAML NameID (usually email).
+ * @param {string|null} sessionIndex - The SAML session index from the login assertion.
+ * @returns {Promise<string|null>}
+ */
+async function buildSamlSloRedirectUrl(nameId, sessionIndex) {
+  const sloUrl = process.env.SAML_SLO_URL;
+  if (!sloUrl) return null;
+
+  try {
+    const strategy = buildSamlStrategy();
+    const fakeReq = {
+      user: {
+        nameID: nameId,
+        nameIDFormat: 'urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress',
+        sessionIndex: sessionIndex || undefined,
+      },
+    };
+    return await new Promise((resolve, reject) => {
+      strategy.logout(fakeReq, (err, url) => {
+        if (err) reject(err);
+        else resolve(url);
+      });
+    });
+  } catch {
+    // Fallback: return the raw SLO URL if passport-saml can't build a signed request
+    return sloUrl;
+  }
 }
 
 /**
@@ -139,6 +181,12 @@ async function buildOidcAuthUrl(state) {
   return client.authorizationUrl({ scope: 'openid email profile', state });
 }
 
+/**
+ * Handle OIDC authorization-code callback.
+ * Returns the provisioned user and the raw id_token (for SLO use).
+ *
+ * @returns {Promise<{ user: object, idToken: string|null }>}
+ */
 async function handleOidcCallback(params, state) {
   const client = await getOidcClient();
   const tokenSet = await client.oauthCallback(process.env.SSO_CALLBACK_URL, params, { state });
@@ -150,7 +198,37 @@ async function handleOidcCallback(params, state) {
   const roleClaimKey = process.env.SSO_ROLE_CLAIM;
   const ssoRole = roleClaimKey ? userinfo[roleClaimKey] : null;
 
-  return provisionUser(email, ssoRole);
+  const user = await provisionUser(email, ssoRole);
+  return { user, idToken: tokenSet.id_token || null };
+}
+
+/**
+ * Build an OIDC end_session URL for SP-initiated logout.
+ * Uses OIDC_END_SESSION_URL env override or auto-discovers from OIDC metadata.
+ * Returns null if no end_session_endpoint is available.
+ *
+ * @param {string|null} idToken - The id_token issued at login (used as id_token_hint).
+ * @param {string|null} postLogoutRedirectUri - Where to redirect after IdP logout.
+ * @returns {Promise<string|null>}
+ */
+async function buildOidcEndSessionUrl(idToken, postLogoutRedirectUri) {
+  let baseUrl = process.env.OIDC_END_SESSION_URL || null;
+
+  if (!baseUrl) {
+    try {
+      const client = await getOidcClient();
+      baseUrl = client.issuer.end_session_endpoint || null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (!baseUrl) return null;
+
+  const url = new URL(baseUrl);
+  if (idToken) url.searchParams.set('id_token_hint', idToken);
+  if (postLogoutRedirectUri) url.searchParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
+  return url.toString();
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +265,9 @@ module.exports = {
   getSamlMetadata,
   buildSamlStrategy,
   ensureSamlStrategyRegistered,
+  buildSamlSloRedirectUrl,
   buildOidcAuthUrl,
   handleOidcCallback,
+  buildOidcEndSessionUrl,
   passport,
 };

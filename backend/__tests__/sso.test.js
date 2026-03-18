@@ -79,6 +79,9 @@ beforeEach(() => {
   delete process.env.SSO_CLIENT_ID;
   delete process.env.SSO_CLIENT_SECRET;
   delete process.env.SSO_ROLE_CLAIM;
+  delete process.env.SAML_SLO_URL;
+  delete process.env.OIDC_END_SESSION_URL;
+  delete process.env.APP_URL;
 
   // Clear cached service module so env changes are picked up
   delete require.cache[require.resolve('../services/ssoService')];
@@ -231,5 +234,119 @@ describe('SSO: getSsoProvider', () => {
     delete require.cache[require.resolve('../services/ssoService')];
     const { getSsoProvider } = require('../services/ssoService');
     assert.equal(getSsoProvider(), 'saml');
+  });
+});
+
+describe('SSO: issueJwt with extraClaims', () => {
+  it('embeds extra claims in the JWT', async () => {
+    process.env.JWT_SECRET = 'test-secret';
+    const { provisionUser, issueJwt } = require('../services/ssoService');
+    const user = await provisionUser('samluser@example.com', null);
+    const jwtLib = require('jsonwebtoken');
+    const token = issueJwt(user, { samlNameId: 'samluser@example.com', samlSessionIndex: 'sess-1' });
+    const decoded = jwtLib.verify(token, 'test-secret');
+    assert.equal(decoded.samlNameId, 'samluser@example.com');
+    assert.equal(decoded.samlSessionIndex, 'sess-1');
+  });
+
+  it('works without extraClaims (backward compat)', async () => {
+    process.env.JWT_SECRET = 'test-secret';
+    const { provisionUser, issueJwt } = require('../services/ssoService');
+    const user = await provisionUser('plain@example.com', null);
+    const jwtLib = require('jsonwebtoken');
+    const token = issueJwt(user);
+    const decoded = jwtLib.verify(token, 'test-secret');
+    assert.equal(decoded.email, 'plain@example.com');
+    assert.ok(!decoded.samlNameId);
+  });
+});
+
+describe('SSO: buildSamlSloRedirectUrl', () => {
+  it('returns null when SAML_SLO_URL is not set', async () => {
+    delete process.env.SAML_SLO_URL;
+    const { buildSamlSloRedirectUrl } = require('../services/ssoService');
+    const url = await buildSamlSloRedirectUrl('user@example.com', null);
+    assert.equal(url, null);
+  });
+});
+
+describe('SSO: buildOidcEndSessionUrl', () => {
+  it('returns null when no end_session URL is available', async () => {
+    delete process.env.OIDC_END_SESSION_URL;
+    const { buildOidcEndSessionUrl } = require('../services/ssoService');
+    const url = await buildOidcEndSessionUrl(null, null);
+    assert.equal(url, null);
+  });
+
+  it('uses OIDC_END_SESSION_URL env override with id_token_hint and post_logout_redirect_uri', async () => {
+    process.env.OIDC_END_SESSION_URL = 'https://idp.example.com/endsession';
+    delete require.cache[require.resolve('../services/ssoService')];
+    const { buildOidcEndSessionUrl } = require('../services/ssoService');
+    const url = await buildOidcEndSessionUrl('my-id-token', 'https://app.example.com/login');
+    assert.ok(url.startsWith('https://idp.example.com/endsession'));
+    assert.ok(url.includes('id_token_hint=my-id-token'));
+    assert.ok(url.includes('post_logout_redirect_uri='));
+    delete process.env.OIDC_END_SESSION_URL;
+  });
+
+  it('omits id_token_hint when idToken is null', async () => {
+    process.env.OIDC_END_SESSION_URL = 'https://idp.example.com/endsession';
+    delete require.cache[require.resolve('../services/ssoService')];
+    const { buildOidcEndSessionUrl } = require('../services/ssoService');
+    const url = await buildOidcEndSessionUrl(null, 'https://app.example.com/login');
+    assert.ok(!url.includes('id_token_hint'));
+    delete process.env.OIDC_END_SESSION_URL;
+  });
+});
+
+describe('SSO controller: /sso/logout', () => {
+  it('returns 501 when SSO is not configured', async () => {
+    const ssoController = require('../controllers/ssoController');
+    const req = { method: 'GET', headers: {}, cookies: {} };
+    const res = makeRes();
+    await ssoController.logout(req, res, (err) => { throw err; });
+    assert.equal(res._status, 501);
+    assert.equal(res._body.error, 'SSO is not configured');
+  });
+
+  it('returns fallback redirectUrl when SAML SLO is not configured', async () => {
+    process.env.SSO_PROVIDER = 'saml';
+    delete process.env.SAML_SLO_URL;
+    delete require.cache[require.resolve('../services/ssoService')];
+    delete require.cache[require.resolve('../controllers/ssoController')];
+    const ssoController = require('../controllers/ssoController');
+    const req = { method: 'GET', headers: {}, cookies: {} };
+    const res = makeRes();
+    await ssoController.logout(req, res, (err) => { throw err; });
+    assert.equal(res._status, 200);
+    assert.ok(res._body.redirectUrl);
+    assert.ok(res._body.redirectUrl.endsWith('/login'));
+  });
+
+  it('returns OIDC end_session URL with id_token_hint from cookie', async () => {
+    process.env.SSO_PROVIDER = 'oidc';
+    process.env.OIDC_END_SESSION_URL = 'https://idp.example.com/endsession';
+    delete require.cache[require.resolve('../services/ssoService')];
+    delete require.cache[require.resolve('../controllers/ssoController')];
+    const ssoController = require('../controllers/ssoController');
+    const req = { method: 'GET', headers: {}, cookies: { oidc_id_token: 'test-id-token' }, ip: '127.0.0.1' };
+    const res = makeRes();
+    await ssoController.logout(req, res, (err) => { throw err; });
+    assert.equal(res._status, 200);
+    assert.ok(res._body.redirectUrl.includes('id_token_hint=test-id-token'));
+    delete process.env.OIDC_END_SESSION_URL;
+  });
+
+  it('returns fallback /login when OIDC has no end_session endpoint', async () => {
+    process.env.SSO_PROVIDER = 'oidc';
+    delete process.env.OIDC_END_SESSION_URL;
+    delete require.cache[require.resolve('../services/ssoService')];
+    delete require.cache[require.resolve('../controllers/ssoController')];
+    const ssoController = require('../controllers/ssoController');
+    const req = { method: 'GET', headers: {}, cookies: {}, ip: '127.0.0.1' };
+    const res = makeRes();
+    await ssoController.logout(req, res, (err) => { throw err; });
+    assert.equal(res._status, 200);
+    assert.ok(res._body.redirectUrl.endsWith('/login'));
   });
 });

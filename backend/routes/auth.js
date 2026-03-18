@@ -6,6 +6,7 @@ const ldapController = require('../controllers/ldapController');
 
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.post('/logout', authController.logout);
 
 // LDAP routes — gracefully return 501 when LDAP is not configured
 router.post('/ldap/login', ldapController.login);
@@ -15,5 +16,6 @@ router.get('/sso/login', ssoController.login);
 router.post('/sso/callback', ssoController.callback); // SAML ACS
 router.get('/sso/callback', ssoController.callback);  // OIDC redirect URI
 router.get('/sso/metadata', ssoController.metadata);  // SAML SP metadata
+router.get('/sso/logout', ssoController.logout);      // SP-initiated SLO
 
 module.exports = router;

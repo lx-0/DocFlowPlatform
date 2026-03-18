@@ -1,6 +1,8 @@
 import { useNavigate, Link } from 'react-router-dom'
 import NotificationBell from '../components/NotificationBell'
 
+const AUTH_MODE = import.meta.env.VITE_AUTH_MODE || 'local'
+
 function getUserRole(token) {
   try {
     return JSON.parse(atob(token.split('.')[1])).role
@@ -14,9 +16,32 @@ export default function Dashboard() {
   const token = localStorage.getItem('token')
   const role = token ? getUserRole(token) : null
 
-  function handleLogout() {
-    localStorage.removeItem('token')
-    navigate('/login')
+  async function handleLogout() {
+    if (AUTH_MODE === 'sso') {
+      try {
+        const res = await fetch('/api/auth/sso/logout', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: 'include',
+        })
+        const data = await res.json()
+        localStorage.removeItem('token')
+        // Redirect to the IdP SLO URL (or fallback to /login)
+        window.location.href = data.redirectUrl || '/login'
+      } catch {
+        localStorage.removeItem('token')
+        window.location.href = '/login'
+      }
+    } else {
+      // Non-SSO: notify backend for audit logging, then clear local session
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+      } catch {}
+      localStorage.removeItem('token')
+      navigate('/login')
+    }
   }
 
   return (
