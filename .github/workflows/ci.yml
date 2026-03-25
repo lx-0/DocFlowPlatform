@@ -27,6 +27,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit dependencies
+        # Fails on high or critical vulnerabilities.
+        # continue-on-error is set because prisma >=6.20 ships @prisma/dev (Prisma Studio
+        # tooling) which bundles a vulnerable version of hono. These are dev-tool advisories
+        # (GHSA-wc8c-qw6v-h7f6 and related hono CVEs) and are NOT exploitable in the
+        # deployed runtime. Tracked for upstream resolution in DOCA-75.
+        # Remove continue-on-error once Prisma ships a fix or we adopt audit-ci allowlisting.
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
       - name: Run tests
         run: npm test --if-present
 
@@ -49,6 +59,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
 
       - name: Lint
         run: npm run lint

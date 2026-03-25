@@ -129,6 +129,7 @@ The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) runs the following j
 ```bash
 cd backend
 npm ci
+npm audit --audit-level=high
 npm test
 ```
 
@@ -136,12 +137,43 @@ npm test
 ```bash
 cd frontend
 npm ci
+npm audit --audit-level=high
 npm run lint
 npm run build
 npm test
 ```
 
 `npm ci` installs from the lockfile exactly as CI does. Use it instead of `npm install` to validate lockfile integrity.
+
+## Dependency Security Scanning
+
+All dependency vulnerabilities are scanned automatically on every PR via `npm audit --audit-level=high`. Builds fail on any **high** or **critical** severity finding.
+
+**Dependabot** is enabled (`.github/dependabot.yml`) and opens automated PRs weekly for outdated packages in both `backend/` and `frontend/`.
+
+### Running an audit locally
+
+```bash
+# Backend
+cd backend && npm audit --audit-level=high
+
+# Frontend
+cd frontend && npm audit --audit-level=high
+```
+
+### Known accepted findings
+
+| Package | Severity | Advisory | Reason | Resolution |
+|:--------|:---------|:---------|:-------|:-----------|
+| `hono` / `@hono/node-server` (via `@prisma/dev`) | High | GHSA-wc8c-qw6v-h7f6 and related | Bundled only inside **Prisma Studio** (a dev tool). Not present in the deployed runtime. | Track upstream Prisma fix or adopt `audit-ci` allowlisting. |
+
+> The backend CI audit step runs with `continue-on-error: true` until the Prisma tooling finding is resolved. All other high/critical vulnerabilities must be fixed before merging.
+
+### Adding a new dependency
+
+1. Install with `npm install <package>`.
+2. Run `npm audit --audit-level=high` — fix or triage any new findings before committing.
+3. Commit both `package.json` and `package-lock.json`.
 
 ## Useful Database Commands
 
