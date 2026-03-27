@@ -145,15 +145,19 @@ model SystemConfig {
 }
 
 model RoutingRule {
-  id            String   @id @default(uuid())
-  name          String
-  documentType  String?
-  departmentTag String?
-  priority      Int
-  targetQueue   String
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                      String   @id @default(uuid())
+  name                    String
+  documentType            String?
+  departmentTag           String?
+  conditions              Json?
+  priority                Int
+  targetQueue             String
+  isActive                Boolean  @default(true)
+  escalationEnabled       Boolean  @default(false)
+  escalationDeadlineHours Int?
+  backupApproverEmail     String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   @@map("routing_rules")
 }
@@ -221,6 +225,8 @@ model ApprovalStep {
   action           StepAction?
   comment          String?
   actedAt          DateTime?
+  startedAt        DateTime?
+  escalatedAt      DateTime?
   workflow         ApprovalWorkflow @relation(fields: [workflowId], references: [id])
 
   @@map("approval_steps")
