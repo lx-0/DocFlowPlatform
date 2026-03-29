@@ -8,6 +8,12 @@ const { validateDocument: runValidation } = require('../services/formatValidator
 const { generateCoverSheet } = require('../services/coverSheetGenerator');
 const { runPipeline } = require('../services/pipelineService');
 const { logEvent } = require('../services/auditLog');
+const {
+  createVersion,
+  listVersions: listVersionRecords,
+  getVersion,
+  diffVersions,
+} = require('../services/documentVersionService');
 
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
 const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -66,6 +72,16 @@ async function uploadDocument(req, res) {
       createdAt: true,
     },
   });
+
+  // Create version 1 record — fire-and-forget, non-fatal
+  createVersion({
+    documentId: doc.id,
+    storagePath,
+    mimeType: req.file.mimetype,
+    sizeBytes: req.file.size,
+    originalFilename: req.file.originalname,
+    submittedByUserId: req.user.userId,
+  }).catch(err => console.error('[Documents] Failed to create version record:', err.message));
 
   // Kick off pipeline asynchronously — client polls GET /status
   runPipeline(doc.id).catch(() => {});
@@ -481,4 +497,138 @@ async function reprocessDocument(req, res) {
   return res.json({ message: 'Reprocessing started.', documentId: doc.id, status: 'uploaded' });
 }
 
-module.exports = { uploadMiddleware, uploadDocument, listDocuments, getDocument, downloadDocument, getDocumentMetadata, formatDoc, downloadFormattedDocument, validateDoc, getValidationReport, applyCoverSheet, downloadFinalDocument, getDocumentStatus, reprocessDocument };
+// ─── Version history ──────────────────────────────────────────────────────────
+
+/**
+ * GET /api/documents/:id/versions — list all versions for a document.
+ * Submitters see only their own documents; admins and approvers see any.
+ */
+async function listDocumentVersions(req, res) {
+  const isAdmin = req.user.role === 'admin' || req.user.role === 'approver';
+  const where = isAdmin ? { id: req.params.id } : { id: req.params.id, uploadedByUserId: req.user.userId };
+
+  const doc = await prisma.document.findFirst({ where, select: { id: true } });
+  if (!doc) return res.status(404).json({ error: 'Document not found.' });
+
+  const versions = await listVersionRecords(doc.id);
+  return res.json({ documentId: doc.id, versions });
+}
+
+/**
+ * GET /api/documents/:id/versions/:versionNumber/download — download a specific version.
+ */
+async function downloadDocumentVersion(req, res) {
+  const versionNumber = parseInt(req.params.versionNumber, 10);
+  if (isNaN(versionNumber)) return res.status(400).json({ error: 'Invalid version number.' });
+
+  const isAdmin = req.user.role === 'admin' || req.user.role === 'approver';
+  const where = isAdmin ? { id: req.params.id } : { id: req.params.id, uploadedByUserId: req.user.userId };
+
+  const doc = await prisma.document.findFirst({ where, select: { id: true } });
+  if (!doc) return res.status(404).json({ error: 'Document not found.' });
+
+  const version = await getVersion(doc.id, versionNumber);
+  if (!version) return res.status(404).json({ error: `Version ${versionNumber} not found.` });
+
+  const filePath = path.join(UPLOAD_DIR, version.storagePath);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found on storage.' });
+
+  res.setHeader('Content-Disposition', `attachment; filename="v${versionNumber}-${version.originalFilename}"`);
+  res.setHeader('Content-Type', version.mimeType);
+  return res.sendFile(filePath);
+}
+
+/**
+ * POST /api/documents/:id/versions — upload a new version (resubmit).
+ * Only the original submitter may add versions.
+ * Body: multipart/form-data with 'file' field.
+ */
+async function resubmitDocument(req, res) {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+
+  const doc = await prisma.document.findFirst({
+    where: { id: req.params.id, uploadedByUserId: req.user.userId },
+    select: { id: true, originalFilename: true },
+  });
+  if (!doc) return res.status(404).json({ error: 'Document not found.' });
+
+  try {
+    const version = await createVersion({
+      documentId: doc.id,
+      storagePath: req.file.filename,
+      mimeType: req.file.mimetype,
+      sizeBytes: req.file.size,
+      originalFilename: req.file.originalname,
+      submittedByUserId: req.user.userId,
+    });
+
+    try {
+      logEvent({
+        actorUserId: req.user.userId || null,
+        action: 'document.version_added',
+        targetType: 'document',
+        targetId: doc.id,
+        metadata: { versionNumber: version.versionNumber, storagePath: req.file.filename },
+        ipAddress: req.ip || null,
+      });
+    } catch {}
+
+    return res.status(201).json(version);
+  } catch (err) {
+    console.error('[Documents] resubmitDocument error:', err);
+    return res.status(500).json({ error: 'Failed to create new version.' });
+  }
+}
+
+/**
+ * GET /api/documents/:id/versions/diff?from=<n>&to=<m> — diff two DOCX versions.
+ * Approvers and admins only.
+ */
+async function diffDocumentVersions(req, res) {
+  const from = parseInt(req.query.from, 10);
+  const to = parseInt(req.query.to, 10);
+
+  if (isNaN(from) || isNaN(to)) {
+    return res.status(400).json({ error: 'Query params "from" and "to" (version numbers) are required.' });
+  }
+  if (from === to) {
+    return res.status(400).json({ error: '"from" and "to" must be different version numbers.' });
+  }
+
+  const isAuthorised = req.user.role === 'admin' || req.user.role === 'approver';
+  const where = isAuthorised ? { id: req.params.id } : { id: req.params.id, uploadedByUserId: req.user.userId };
+
+  const doc = await prisma.document.findFirst({ where, select: { id: true } });
+  if (!doc) return res.status(404).json({ error: 'Document not found.' });
+
+  try {
+    const diff = await diffVersions(doc.id, from, to);
+    return res.json(diff);
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message });
+    if (err.code === 'UNSUPPORTED_TYPE') return res.status(422).json({ error: err.message });
+    console.error('[Documents] diffDocumentVersions error:', err);
+    return res.status(500).json({ error: 'Failed to compute diff.' });
+  }
+}
+
+module.exports = {
+  uploadMiddleware,
+  uploadDocument,
+  listDocuments,
+  getDocument,
+  downloadDocument,
+  getDocumentMetadata,
+  formatDoc,
+  downloadFormattedDocument,
+  validateDoc,
+  getValidationReport,
+  applyCoverSheet,
+  downloadFinalDocument,
+  getDocumentStatus,
+  reprocessDocument,
+  listDocumentVersions,
+  downloadDocumentVersion,
+  resubmitDocument,
+  diffDocumentVersions,
+};

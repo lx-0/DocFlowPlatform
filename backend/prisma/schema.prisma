@@ -131,8 +131,27 @@ model Document {
   metadata             DocumentMetadata?
   validationReport     ValidationReport?
   approvalWorkflow     ApprovalWorkflow?
+  versions             DocumentVersion[]
 
   @@map("docflow_documents")
+}
+
+/// Immutable snapshot of a document at a point in time.
+model DocumentVersion {
+  id               String   @id @default(uuid())
+  documentId       String
+  versionNumber    Int
+  storagePath      String
+  mimeType         String
+  sizeBytes        Int
+  originalFilename String
+  submittedByUserId String
+  createdAt        DateTime @default(now())
+  document         Document @relation(fields: [documentId], references: [id])
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId])
+  @@map("document_versions")
 }
 
 /// Key-value store for admin-configurable system settings.

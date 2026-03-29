@@ -421,6 +421,14 @@ function buildSettingsResponse(map) {
     smtpPass: map['smtp.pass'] ? '*****' : '',
     smtpFromAddress: map['smtp.fromAddress'] || '',
     smtpFromName: map['smtp.fromName'] || '',
+    // Bulk approval settings
+    bulkApprovalExcludedTypes: map.bulk_approval_excluded_types
+      ? JSON.parse(map.bulk_approval_excluded_types)
+      : [],
+    // Version retention (0 = unlimited)
+    maxVersionsPerDocument: map.max_versions_per_document != null
+      ? parseInt(map.max_versions_per_document, 10)
+      : 0,
   };
 }
 
@@ -445,6 +453,8 @@ router.patch('/settings', authenticate, requirePermission('admin:users'), async 
     smtpPass,
     smtpFromAddress,
     smtpFromName,
+    bulkApprovalExcludedTypes,
+    maxVersionsPerDocument,
   } = req.body;
 
   const updates = [];
@@ -494,6 +504,21 @@ router.patch('/settings', authenticate, requirePermission('admin:users'), async 
   if (smtpFromName !== undefined) {
     updates.push({ key: 'smtp.fromName', value: String(smtpFromName) });
     smtpChanged.push('smtpFromName');
+  }
+
+  if (bulkApprovalExcludedTypes !== undefined) {
+    if (!Array.isArray(bulkApprovalExcludedTypes) || !bulkApprovalExcludedTypes.every(t => typeof t === 'string')) {
+      return res.status(400).json({ error: 'bulkApprovalExcludedTypes must be an array of strings' });
+    }
+    updates.push({ key: 'bulk_approval_excluded_types', value: JSON.stringify(bulkApprovalExcludedTypes) });
+  }
+
+  if (maxVersionsPerDocument !== undefined) {
+    const val = parseInt(maxVersionsPerDocument, 10);
+    if (isNaN(val) || val < 0) {
+      return res.status(400).json({ error: 'maxVersionsPerDocument must be a non-negative integer (0 = unlimited)' });
+    }
+    updates.push({ key: 'max_versions_per_document', value: String(val) });
   }
 
   if (updates.length === 0) {
